@@ -1,2 +1,3 @@
-# cognitivefactory-platform
-CognitiveFactory platform source code
+# wordsLab
+
+*wordsLab* platform source code
