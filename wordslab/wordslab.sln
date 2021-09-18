@@ -1,11 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31613.86
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31612.314
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wordslab.installer", "wordslab.installer\wordslab.installer.csproj", "{882D3C41-A429-4E63-917A-A7FF1C70E51C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "wordslab.installer", "wordslab.installer\wordslab.installer.csproj", "{882D3C41-A429-4E63-917A-A7FF1C70E51C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wordslab.train", "wordslab.train\wordslab.train.csproj", "{0CD0F89B-2688-4A41-8F10-26D0FEA3187B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "wordslab.documents", "wordslab.documents\wordslab.documents.csproj", "{795F7063-62DD-4B88-9F27-72B6A8F801BD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dependencies", "dependencies", "{974E0D06-5927-4110-A9C8-03AD9579985E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AngleSharp", "AngleSharp\AngleSharp.csproj", "{761CC664-0ABE-471D-ADBB-973B44560339}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AngleSharp.Css", "AngleSharp.Css\AngleSharp.Css.csproj", "{65879134-FEF5-445C-9B49-E26BAE5EC584}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NRobotsCore", "NRobotsCore\NRobotsCore.csproj", "{66E55012-8334-4C97-A48C-060193F18977}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Abot", "Abot\Abot.csproj", "{D34FA3C4-F258-4438-896B-862FB7C88353}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,13 +27,35 @@ Global
 		{882D3C41-A429-4E63-917A-A7FF1C70E51C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{882D3C41-A429-4E63-917A-A7FF1C70E51C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{882D3C41-A429-4E63-917A-A7FF1C70E51C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{0CD0F89B-2688-4A41-8F10-26D0FEA3187B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{0CD0F89B-2688-4A41-8F10-26D0FEA3187B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{0CD0F89B-2688-4A41-8F10-26D0FEA3187B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0CD0F89B-2688-4A41-8F10-26D0FEA3187B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{795F7063-62DD-4B88-9F27-72B6A8F801BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{795F7063-62DD-4B88-9F27-72B6A8F801BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{795F7063-62DD-4B88-9F27-72B6A8F801BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{795F7063-62DD-4B88-9F27-72B6A8F801BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{761CC664-0ABE-471D-ADBB-973B44560339}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{761CC664-0ABE-471D-ADBB-973B44560339}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{761CC664-0ABE-471D-ADBB-973B44560339}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{761CC664-0ABE-471D-ADBB-973B44560339}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65879134-FEF5-445C-9B49-E26BAE5EC584}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65879134-FEF5-445C-9B49-E26BAE5EC584}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65879134-FEF5-445C-9B49-E26BAE5EC584}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65879134-FEF5-445C-9B49-E26BAE5EC584}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66E55012-8334-4C97-A48C-060193F18977}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66E55012-8334-4C97-A48C-060193F18977}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66E55012-8334-4C97-A48C-060193F18977}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66E55012-8334-4C97-A48C-060193F18977}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D34FA3C4-F258-4438-896B-862FB7C88353}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D34FA3C4-F258-4438-896B-862FB7C88353}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D34FA3C4-F258-4438-896B-862FB7C88353}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D34FA3C4-F258-4438-896B-862FB7C88353}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{761CC664-0ABE-471D-ADBB-973B44560339} = {974E0D06-5927-4110-A9C8-03AD9579985E}
+		{65879134-FEF5-445C-9B49-E26BAE5EC584} = {974E0D06-5927-4110-A9C8-03AD9579985E}
+		{66E55012-8334-4C97-A48C-060193F18977} = {974E0D06-5927-4110-A9C8-03AD9579985E}
+		{D34FA3C4-F258-4438-896B-862FB7C88353} = {974E0D06-5927-4110-A9C8-03AD9579985E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {31BC8F40-4C87-42F2-B153-466DF3226E14}

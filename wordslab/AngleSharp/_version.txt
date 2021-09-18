@@ -1,0 +1,3 @@
+﻿tag 0.16.0
+commit fe945b106348f03aa1538b82dca744470eb949cf
+https://github.com/AngleSharp/AngleSharp/archive/refs/tags/v0.16.0.zip

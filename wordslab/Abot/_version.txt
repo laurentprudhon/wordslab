@@ -1,0 +1,3 @@
+﻿v2.0.70
+commit 0363d0195d739ecff5360b07ecfdfe885f51a125
+https://github.com/sjdirect/abot/archive/0363d0195d739ecff5360b07ecfdfe885f51a125.zip

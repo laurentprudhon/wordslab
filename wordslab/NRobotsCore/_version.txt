@@ -1,0 +1,3 @@
+﻿v1.1.3
+commit 73d9e559b4182f0d40ffaded3b561749ddb9ce29
+https://github.com/Kemyke/nrobots-dotnet-core/archive/73d9e559b4182f0d40ffaded3b561749ddb9ce29.zip

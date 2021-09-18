@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="pdf\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="2.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abot\Abot.csproj" />
+    <ProjectReference Include="..\AngleSharp.Css\AngleSharp.Css.csproj" />
+    <ProjectReference Include="..\AngleSharp\AngleSharp.csproj" />
+  </ItemGroup>
+
+</Project>
