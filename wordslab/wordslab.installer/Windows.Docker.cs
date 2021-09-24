@@ -17,7 +17,7 @@ namespace wordslab.installer.Windows
                 int exitcode = Process.Run("wsl.exe", "-- ls -l $(which docker)", 5, out output, out error);
                 if (exitcode == 0 && String.IsNullOrEmpty(error) && !String.IsNullOrEmpty(output))
                 {
-                    if(!output.Contains("docker-desktop"))
+                    if(!output.Contains("Program Files") && !output.Contains("docker-desktop"))
                     {
                         return true;
                     }

@@ -8,9 +8,9 @@ namespace wordslab.installer
     {
         static int Main(string[] args)
         {
-            AnsiConsole.MarkupLine("[bold navy on grey93] ----------------------------------- [/]");
-            AnsiConsole.MarkupLine("[bold navy on grey93] CognitiveFactory Platform Installer [/]");
-            AnsiConsole.MarkupLine("[bold navy on grey93] ----------------------------------- [/]");
+            AnsiConsole.MarkupLine("[bold navy on grey93] --------------------------- [/]");
+            AnsiConsole.MarkupLine("[bold navy on grey93] Wordslab Platform Installer [/]");
+            AnsiConsole.MarkupLine("[bold navy on grey93] --------------------------- [/]");
             AnsiConsole.WriteLine();
 
             AnsiConsole.MarkupLine("1. [underline]Check operating system[/] :");
@@ -19,7 +19,7 @@ namespace wordslab.installer
             var arch = RuntimeInformation.ProcessArchitecture;
             if (arch != Architecture.X64)
             {
-                AnsiConsole.MarkupLine($"[red]Sorry, the CognitiveFactory Platform is only supported on x64 systems[/] (your architecture = \"{arch}\")");
+                AnsiConsole.MarkupLine($"[red]Sorry, the Wordslab Platform is only supported on x64 systems[/] (your architecture = \"{arch}\")");
                 AnsiConsole.WriteLine();
                 return 1;
             }
@@ -117,8 +117,16 @@ namespace wordslab.installer
                 case -1:
                     AnsiConsole.MarkupLine("[red]Windows Subsystem For Linux 2 is not installed[/]");
                     AnsiConsole.WriteLine();
-                    AnsiConsole.MarkupLine("Please go to [yellow underline]https://docs.microsoft.com/en-us/windows/wsl/install-win10[/] and follow the instructions");
-                    AnsiConsole.MarkupLine("Select the following Linux distribution : [white]Ubuntu 20.04[/]");
+                    if (PlatformDetection.IsWindows11Version2110OrGreater) 
+                    {
+                        AnsiConsole.MarkupLine("Please execute the command below in Windows Terminal (admin) [[Win+X]] then restart your machine :");
+                        AnsiConsole.MarkupLine("[white]wsl --install[/] ");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("Please go to [yellow underline]https://docs.microsoft.com/en-us/windows/wsl/install-win10[/] and follow the instructions");
+                        AnsiConsole.MarkupLine("Select the following Linux distribution : [white]Ubuntu 20.04[/]");
+                    }
                     AnsiConsole.WriteLine();
                     return 1;
                 case 0:
@@ -210,7 +218,7 @@ namespace wordslab.installer
 
             AnsiConsole.MarkupLine("Docker Desktop for Windows [bold green]OK[/]");
             AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine("Please note that the Cognitive Factory Platform will :");
+            AnsiConsole.WriteLine("Please note that the Wordslab Platform will :");
             AnsiConsole.WriteLine("- start (and consume memory) as soon as you start Docker Desktop");
             AnsiConsole.WriteLine("- stop (and release memory) a few seconds after you stop Docker Desktop");
             AnsiConsole.WriteLine();
@@ -224,7 +232,7 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine("You are now [bold green]READY[/] to continue the install procedure in Linux");
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("Open your Ubuntu command shell in Windows Subsystem for Linux and execute the command below :");
-            AnsiConsole.MarkupLine("[white]wget https://www.cognitivefactory.fr/assets/cognitivefactory && chmod u+x cognitivefactory && cognitivefactory[/]");
+            AnsiConsole.MarkupLine("[white]wget https://www.cognitivefactory.fr/assets/wordslab && chmod u+x wordslab && wordslab[/]");
             AnsiConsole.WriteLine();
             return 0;
         }
@@ -331,7 +339,7 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine("6. [underline]Create Kubernetes cluster[/] :");
             AnsiConsole.WriteLine();
 
-            var clusterName = "cogfactory-cluster";
+            var clusterName = "wordslab-cluster";
             if(!Linux.K3d.DoesK3dClusterExist(clusterName))
             {
                 AnsiConsole.WriteLine($"Creating cluster {clusterName} ... (this may take several minutes)");
@@ -366,7 +374,7 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine("7. [underline]Install Yugabyte database[/] :");
             AnsiConsole.WriteLine();
 
-            var installName = "cogfactory-db";
+            var installName = "wordslab-db";
             AnsiConsole.WriteLine($"Installing database {installName} ... (this may take several minutes)");
             var diagnosticIfError = Linux.Yugabyte.InstallYugabyteDB(clusterName, installNamespace: installName, installName: installName);
             if (diagnosticIfError != null)

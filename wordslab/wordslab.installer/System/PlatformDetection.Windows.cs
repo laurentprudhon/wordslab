@@ -56,6 +56,9 @@ namespace System
 
         public static bool IsWindows10Version2004Build19573OrGreater => IsWindowsVersionOrLater(10, 0, 19573);
 
+        // >= Windows 11 21H2
+        public static bool IsWindows11Version2110OrGreater => IsWindowsVersionOrLater(10, 0, 22000);
+
         public static bool IsWindowsIoTCore
         {
             get

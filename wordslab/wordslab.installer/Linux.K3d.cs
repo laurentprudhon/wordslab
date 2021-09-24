@@ -53,7 +53,7 @@ namespace wordslab.installer.Linux
                 if (exitcode == 0 && String.IsNullOrEmpty(error) && !String.IsNullOrEmpty(output))
                 {
                     // NAME                 SERVERS   AGENTS   LOADBALANCER
-                    // cogfactory-cluster   1/1       3/3      true
+                    // wordslab-cluster   1/1       3/3      true
                     var lines = output.Split('\n');
                     foreach (var line in lines)
                     {
@@ -143,9 +143,9 @@ namespace wordslab.installer.Linux
         k3d node list
 
 NAME                              ROLE           CLUSTER              STATUS
-k3d-cogfactory-cluster-agent-0    agent          cogfactory-cluster   running
+k3d-wordslab-cluster-agent-0    agent          wordslab-cluster   running
 
-        docker exec -it k3d-cogfactory-cluster-agent-0 sh
+        docker exec -it k3d-wordslab-cluster-agent-0 sh
 
         crictl images
 
@@ -171,7 +171,7 @@ b9f25a4125000       ad3a83a790f47       24 hours ago        Running             
 
         crictl info
         
-[k3d-cogfactory-cluster-registry:5000]
+[k3d-wordslab-cluster-registry:5000]
 
         crictl stats
 
