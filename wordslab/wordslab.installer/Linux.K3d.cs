@@ -74,12 +74,17 @@ namespace wordslab.installer.Linux
         // null is the cluster was sucessfully created
         // command string if the create command failed
         public static string CreateK3dCluster(string clusterName, int agents = 3, int hostWebPort = 8080,
-            bool createRegistry = true, bool exposeYDBPorts = true, bool mapHostPathDirectories = true, bool updateKubeconfig = true)
+            bool createRegistry = false, bool exposeYugabyteDBPorts = false, bool exposePostgresqlPort = false, 
+            bool mapHostPathDirectories = true, bool updateKubeconfig = true)
         {
             var command = $"cluster create {clusterName} --agents {agents} -p {hostWebPort}:80@loadbalancer";
-            if (exposeYDBPorts)
+            if (exposeYugabyteDBPorts)
             {
                 command += " -p 7000:7000@loadbalancer -p 9042:9042@loadbalancer -p 6379:6379@loadbalancer -p 5433:5433@loadbalancer";
+            }
+            if (exposePostgresqlPort)
+            {
+                command += " -p 5432:5432@loadbalancer";
             }
             if (createRegistry)
             {

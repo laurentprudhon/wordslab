@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 
 namespace wordslab.installer
 {
+    // /mnt/c/Users/laure/OneDrive/Dev/C#/wordslab/wordslab/wordslab.installer/bin/Release/net6.0/publish/linux-x64
+
     class Program
     {
         static int Main(string[] args)
@@ -340,10 +342,11 @@ namespace wordslab.installer
             AnsiConsole.WriteLine();
 
             var clusterName = "wordslab-cluster";
+            int agents = 3;
             if(!Linux.K3d.DoesK3dClusterExist(clusterName))
             {
                 AnsiConsole.WriteLine($"Creating cluster {clusterName} ... (this may take several minutes)");
-                var commandIfError = Linux.K3d.CreateK3dCluster(clusterName: clusterName, agents: 3, hostWebPort: 8080);
+                var commandIfError = Linux.K3d.CreateK3dCluster(clusterName: clusterName, agents: agents, hostWebPort: 8080);
                 if (commandIfError != null)
                 {
                     AnsiConsole.MarkupLine("[red]Failed to create k3d cluster[/]");
@@ -354,7 +357,7 @@ namespace wordslab.installer
                 }
 
                 AnsiConsole.WriteLine($"Labeling cluster nodes ...");
-                var messageIfError = Linux.K3d.LabelK3dClusterNodes(clusterName: clusterName, agents: 3);
+                var messageIfError = Linux.K3d.LabelK3dClusterNodes(clusterName: clusterName, agents: agents);
                 if (messageIfError != null)
                 {
                     AnsiConsole.MarkupLine("[red]Failed to label k3d cluster nodes[/]");
@@ -371,6 +374,7 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine($"Cluster {clusterName} [bold green]OK[/]");
             AnsiConsole.WriteLine();
 
+            /*
             AnsiConsole.MarkupLine("7. [underline]Install Yugabyte database[/] :");
             AnsiConsole.WriteLine();
 
@@ -387,6 +391,37 @@ namespace wordslab.installer
             }
             else
             {
+                AnsiConsole.WriteLine();
+            }
+            */
+
+            AnsiConsole.MarkupLine("7. [underline]Install Postgresql database[/] :");
+            AnsiConsole.WriteLine();
+
+            var installName = "wordslab-db";
+            int postgresqlPort = 5432; 
+            var sqlUser = "wordslab";
+            var sqlPassword = "wordsl@b2021";
+            AnsiConsole.WriteLine($"Installing database {installName} ... (this may take several minutes)");
+            var diagnosticIfError = Linux.Postgresql.InstallPostgresql(databaseName : installName, installNamespace: installName, helmInstallName: installName,
+                sqlUser: sqlUser, sqlPassword: sqlPassword, storageClass: "local-path", port: postgresqlPort);
+            if (diagnosticIfError != null)
+            {
+                AnsiConsole.MarkupLine("[red]Failed to install Postgresql database[/]");
+                AnsiConsole.WriteLine("Installation error diagnostic :");
+                AnsiConsole.WriteLine(diagnosticIfError);
+                AnsiConsole.WriteLine();
+                return 1;
+            }
+            else
+            {
+                AnsiConsole.WriteLine();
+                AnsiConsole.WriteLine($"PostgreSQL can be accessed via port {postgresqlPort} on the following DNS names from within your cluster:");
+                AnsiConsole.MarkupLine($"   [white]{installName}-postgresql.{installName}.svc.cluster.local[/]");
+                AnsiConsole.WriteLine("To get the password for \"postgres\" run:");
+                AnsiConsole.MarkupLine($"   [white]export POSTGRES_PASSWORD=$(kubectl get secret --namespace {installName} {installName}-postgresql -o jsonpath=\"{{.data.postgresql-password}}\" | base64 --decode)[/]");
+                AnsiConsole.WriteLine("To connect to your database from outside the cluster execute the following commands:");
+                AnsiConsole.MarkupLine($"   [white]kubectl port-forward --namespace {installName} svc/{installName}-postgresql {postgresqlPort}:{postgresqlPort}[/]");
                 AnsiConsole.WriteLine();
             }
 
