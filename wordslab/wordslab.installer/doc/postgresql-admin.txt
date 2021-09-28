@@ -1,0 +1,501 @@
+﻿# PostgreSQL Administration
+
+https://www.postgresql.org/docs/current/
+
+## General Architecture
+
+### Database cluster
+
+As with any server daemon that is accessible to the outside world, it is advisable to run PostgreSQL under a separate user account. 
+This user account should only own the data that is managed by the server, and should not be shared with other daemons.
+In particular, it is advisable that this user account not own the PostgreSQL executable files, to ensure that a compromised server process could not modify those executables.
+
+Before you can do anything, you must initialize a database storage area on disk. We call this a database cluster. 
+A database cluster is a collection of databases that is managed by a single instance of a running database server. 
+
+After initialization, a database cluster will contain a database named postgres, which is meant as a default database for use by utilities, users and third party applications.
+Another database created within each cluster during initialization is called template1. 
+As the name suggests, this will be used as a template for subsequently created databases; it should not be used for actual work.
+
+In file system terms, a database cluster is a single directory under which all data will be stored. We call this the data directory or data area. 
+It is completely up to you where you choose to store your data. There is no default, although locations such as /usr/local/pgsql/data or /var/lib/pgsql/data are popular.
+The data directory must be initialized before being used, using the program initdb which is installed with PostgreSQL.
+
+initdb -D /usr/local/pgsql/data
+As an alternative to the -D option, you can set the environment variable PGDATA.
+
+The default client authentication setup allows any local user to connect to the database and even become the database superuser. If you do not trust other local users, we recommend you use one of initdb's -W, --pwprompt or --pwfile options to assign a password to the database superuser. 
+Also, specify -A md5 or -A password so that the default trust authentication mode is not used; or modify the generated pg_hba.conf file after running initdb, but before you start the server for the first time. 
+
+initdb also initializes the default locale for the database cluster. Normally, it will just take the locale settings in the environment and apply them to the initialized database. 
+It is possible to specify a different locale for the database. 
+
+The default sort order used within the particular database cluster is set by initdb, and while you can create new databases using different sort order, the order used in the template databases that initdb creates cannot be changed without dropping and recreating them. 
+
+initdb also sets the default character set encoding for the database cluster. Normally this should be chosen to match the locale setting.
+
+### Database Server
+
+Before anyone can access the database, you must start the database server. The database server program is called postgres.
+
+The bare-bones way to start the server manually is just to invoke postgres directly, specifying the location of the data directory with the -D option, for example:
+postgres -D /usr/local/pgsql/data
+
+This shell syntax can get tedious quickly. Therefore the wrapper program pg_ctl is provided to simplify some tasks. For example:
+pg_ctl start -l logfile
+will start the server in the background and put the output into the named log file. The -D option has the same meaning here as for postgres. pg_ctl is also capable of stopping the server.
+
+There are several ways to shut down the database server. Under the hood, they all reduce to sending a signal to the supervisor postgres process.
+The pg_ctl program provides a convenient interface for sending these signals to shut down the server
+
+### Databases
+
+Every instance of a running PostgreSQL server manages one or more databases. 
+Databases are therefore the topmost hierarchical level for organizing SQL objects (“database objects”). 
+
+A small number of objects, like role, database, and tablespace names, are defined at the cluster level and stored in the pg_global tablespace. 
+Inside the cluster are multiple databases, which are isolated from each other but can access cluster-level objects. 
+Inside each database are multiple schemas, which contain objects like tables and functions. 
+So the full hierarchy is: cluster, database, schema, table (or some other kind of object, such as a function).
+
+When connecting to the database server, a client must specify the database name in its connection request. 
+It is not possible to access more than one database per connection.
+Database-level security has two components: access control (see Section 20.1), managed at the connection level, and authorization control (see Section 5.7), managed via the grant system. 
+
+If one PostgreSQL server cluster is planned to contain unrelated projects or users that should be, for the most part, unaware of each other, it is recommended to put them into separate databases and adjust authorizations and access controls accordingly. 
+If the projects or users are interrelated, and thus should be able to use each other's resources, they should be put in the same database but probably into separate schemas; this provides a modular structure with namespace isolation and authorization control.
+
+While multiple databases can be created within a single cluster, it is advised to consider carefully whether the benefits outweigh the risks and limitations. 
+In particular, the impact that having a shared WAL (see Chapter 29) has on backup and recovery options. 
+While individual databases in the cluster are isolated when considered from the user's perspective, they are closely bound from the database administrator's point-of-view.
+
+atabases are created with the CREATE DATABASE command (see Section 22.2) and destroyed with the DROP DATABASE command (see Section 22.5). 
+To determine the set of existing databases, examine the pg_database system catalog, for example
+SELECT datname FROM pg_database;
+The psql program's \l meta-command and -l command-line option are also useful for listing the existing databases.
+
+### Tablespaces
+
+Tablespaces in PostgreSQL allow database administrators to define locations in the file system where the files representing database objects can be stored. 
+Once created, a tablespace can be referred to by name when creating database objects.
+
+By using tablespaces, an administrator can control the disk layout of a PostgreSQL installation. This is useful in at least two ways. 
+First, if the partition or volume on which the cluster was initialized runs out of space and cannot be extended, a tablespace can be created on a different partition and used until the system can be reconfigured.
+Second, tablespaces allow an administrator to use knowledge of the usage pattern of database objects to optimize performance. For example, an index which is very heavily used can be placed on a very fast, highly available disk, such as an expensive solid state device. At the same time a table storing archived data which is rarely used or not performance critical could be stored on a less expensive, slower disk system.
+
+To define a tablespace, use the CREATE TABLESPACE command, for example: CREATE TABLESPACE fastspace LOCATION '/ssd1/postgresql/data';
+The location must be an existing, empty directory that is owned by the PostgreSQL operating system user. All objects subsequently created within the tablespace will be stored in files underneath this directory. 
+
+Tables, indexes, and entire databases can be assigned to particular tablespaces. 
+To do so, a user with the CREATE privilege on a given tablespace must pass the tablespace name as a parameter to the relevant command. 
+For example, the following creates a table in the tablespace space1: CREATE TABLE foo(i int) TABLESPACE space1;
+
+### Upgrades
+
+Current PostgreSQL version numbers consist of a major and a minor version number. For example, in the version number 10.1, the 10 is the major version number and the 1 is the minor version number, meaning this would be the first minor release of the major release 10. 
+
+Minor releases never change the internal storage format and are always compatible with earlier and later minor releases of the same major version number. For example, version 10.1 is compatible with version 10.0 and version 10.6.
+To update between compatible versions, you simply replace the executables while the server is down and restart the server. The data directory remains unchanged — minor upgrades are that simple.
+
+For major releases of PostgreSQL, the internal data storage format is subject to change, thus complicating upgrades.
+The traditional method for moving data to a new major version is to dump and reload the database, though this can be slow.
+A faster method is pg_upgrade. Replication methods are also available, as discussed below. 
+
+New major versions also typically introduce some user-visible incompatibilities, so application programming changes might be required. 
+All user-visible changes are listed in the release notes (Appendix E); pay particular attention to the section labeled "Migration". 
+
+One upgrade method is to dump data from one major version of PostgreSQL and reload it in another — to do this, you must use a logical backup tool like pg_dumpall; file system level backup methods will not work.
+There are checks in place that prevent you from using a data directory with an incompatible version of PostgreSQL, so no great harm can be done by trying to start the wrong server version on a data directory.
+It is recommended that you use the pg_dump and pg_dumpall programs from the newer version of PostgreSQL, to take advantage of enhancements that might have been made in these programs. 
+
+The pg_upgrade module allows an installation to be migrated in-place from one major PostgreSQL version to another.
+Upgrades can be performed in minutes, particularly with --link mode. It requires steps similar to pg_dumpall above, e.g., starting/stopping the server, running initdb. 
+
+It is also possible to use logical replication methods to create a standby server with the updated version of PostgreSQL.
+This is possible because logical replication supports replication between different major versions of PostgreSQL.
+The standby can be on the same computer or a different computer.
+
+### Encryption
+
+PostgreSQL offers encryption at several levels, and provides flexibility in protecting data from disclosure due to database server theft, unscrupulous administrators, and insecure networks.
+
+- Password Encryption : Database user passwords are stored as hashes (determined by the setting password_encryption), so the administrator cannot determine the actual password assigned to the user. If SCRAM or MD5 encryption is used for client authentication, the unencrypted password is never even temporarily present on the server because the client encrypts it before being sent across the network. SCRAM is preferred, because it is an Internet standard and is more secure than the PostgreSQL-specific MD5 authentication protocol.
+- Encryption For Specific Columns : The pgcrypto module allows certain fields to be stored encrypted. The client supplies the decryption key and the data is decrypted on the server and then sent to the client.
+- Data Partition Encryption : Storage encryption can be performed at the file system level or the block level. This mechanism prevents unencrypted data from being read from the drives if the drives or the entire computer is stolen. This does not protect against attacks while the file system is mounted, because when mounted, the operating system provides an unencrypted view of the data.
+- Encrypting Data Across A Network : SSL connections encrypt all data sent across the network: the password, the queries, and the data returned. The pg_hba.conf file allows administrators to specify which hosts can use non-encrypted connections (host) and which require SSL-encrypted connections (hostssl). Also, clients can specify that they connect to servers only via SSL.
+- SSL Host Authentication : It is possible for both the client and server to provide SSL certificates to each other. It takes some extra configuration on each side, but this provides stronger verification of identity than the mere use of passwords.
+- Client-Side Encryption : If the system administrator for the server's machine cannot be trusted, it is necessary for the client to encrypt the data; this way, unencrypted data never appears on the database server. Data is encrypted on the client before being sent to the server, and database results have to be decrypted on the client before being used.
+
+The PostgreSQL server can be started with SSL enabled by setting the parameter ssl to on in postgresql.conf. The server will listen for both normal and SSL connections on the same TCP port, and will negotiate with any connecting client on whether to use SSL. 
+By default, this is at the client's option; see Section 20.1 about how to set up the server to require use of SSL for some or all connections.
+
+To start in SSL mode, files containing the server certificate and private key must exist. 
+By default, these files are expected to be named server.crt and server.key, respectively, in the server's data directory, but other names and locations can be specified using the configuration parameters ssl_cert_file and ssl_key_file.
+
+To require the client to supply a trusted certificate, place certificates of the root certificate authorities (CAs) you trust in a file in the data directory, set the parameter ssl_ca_file in postgresql.conf to the new file name, and add the authentication option clientcert=verify-ca or clientcert=verify-full to the appropriate hostssl line(s) in pg_hba.conf. 
+A certificate will then be requested from the client during SSL connection startup.
+
+### Localization
+
+Locale support is automatically initialized when a database cluster is created using initdb. 
+initdb will initialize the database cluster with the locale setting of its execution environment by default, so if your system is already set to use the locale that you want in your database cluster then there is nothing else you need to do. 
+If you want to use a different locale (or you are not sure which locale your system is set to), you can instruct initdb exactly which locale to use by specifying the --locale option. For example: initdb --locale=sv_SE
+
+Occasionally it is useful to mix rules from several locales, e.g., use English collation rules but Spanish messages. 
+To support that, a set of locale subcategories exist that control only certain aspects of the localization rules:
+LC_COLLATE	String sort order
+LC_CTYPE	Character classification (What is a letter? Its upper-case equivalent?)
+LC_MESSAGES	Language of messages
+LC_MONETARY	Formatting of currency amounts
+LC_NUMERIC	Formatting of numbers
+LC_TIME	Formatting of dates and times
+
+Some locale categories must have their values fixed when the database is created. You can use different settings for different databases, but once a database is created, you cannot change them for that database anymore. 
+LC_COLLATE and LC_CTYPE are these categories. They affect the sort order of indexes, so they must be kept fixed, or indexes on text columns would become corrupt.
+The other locale categories can be changed whenever desired by setting the server configuration parameters that have the same name as the locale categories.
+
+The locale settings influence the following SQL features:
+- Sort order in queries using ORDER BY or the standard comparison operators on textual data
+- The upper, lower, and initcap functions
+- Pattern matching operators (LIKE, SIMILAR TO, and POSIX-style regular expressions); locales affect both case insensitive matching and the classification of characters by character-class regular expressions
+- The to_char family of functions
+- The ability to use indexes with LIKE clauses
+
+The collation feature allows specifying the sort order and character classification behavior of data per-column, or even per-operation. 
+This alleviates the restriction that the LC_COLLATE and LC_CTYPE settings of a database cannot be changed after its creation.
+
+Conceptually, every expression of a collatable data type has a collation. The built-in collatable data types are text, varchar, and char. 
+If the expression is a column reference, the collation of the expression is the defined collation of the column. If the expression is a constant, the collation is the default collation of the data type of the constant. The collation of a more complex expression is derived from the collations of its inputs, as described below.
+
+A collation is an SQL schema object that maps an SQL name to locales provided by libraries installed in the operating system.
+
+The character set support in PostgreSQL allows you to store text in a variety of character sets (also called encodings), including single-byte character sets such as the ISO 8859 series and multiple-byte character sets such as EUC (Extended Unix Code), UTF-8, and Mule internal code. 
+The default character set is selected while initializing your PostgreSQL database cluster using initdb. 
+It can be overridden when you create a database, so you can have multiple databases each with a different character set.
+
+### Configuration
+
+The most fundamental way to set these parameters is to edit the file postgresql.conf, which is normally kept in the data directory. 
+A default copy is installed when the database cluster directory is initialized. 
+
+The configuration file is reread whenever the main server process receives a SIGHUP signal; this signal is most easily sent by running pg_ctl reload from the command line or by calling the SQL function pg_reload_conf(). 
+The main server process also propagates this signal to all currently running server processes, so that existing sessions also adopt the new values (this will happen after they complete any currently-executing client command). 
+
+In addition to postgresql.conf, a PostgreSQL data directory contains a file postgresql.auto.conf, which has the same format as postgresql.conf but is intended to be edited automatically, not manually. This file holds settings provided through the ALTER SYSTEM command. 
+This file is read whenever postgresql.conf is, and its settings take effect in the same way. Settings in postgresql.auto.conf override those in postgresql.conf.
+
+In addition, there are two commands that allow setting of defaults on a per-database or per-role basis:
+- The ALTER DATABASE command allows global settings to be overridden on a per-database basis.
+- The ALTER ROLE command allows both global and per-database settings to be overridden with user-specific values.
+Values set with ALTER DATABASE and ALTER ROLE are applied only when starting a fresh database session. They override values obtained from the configuration files or server command line, and constitute defaults for the rest of the session. 
+Note that some settings cannot be changed after server start, and so cannot be set with these commands (or the ones listed below).
+
+Once a client is connected to the database, PostgreSQL provides two additional SQL commands (and equivalent functions) to interact with session-local configuration settings:
+- The SHOW command allows inspection of the current value of any parameter. The corresponding SQL function is current_setting(setting_name text) (see Section 9.27.1).
+- The SET command allows modification of the current value of those parameters that can be set locally to a session; it has no effect on other sessions. The corresponding SQL function is set_config(setting_name, new_value, is_local) 
+
+data_directory (string)
+Specifies the directory to use for data storage. This parameter can only be set at server start.
+
+config_file (string)
+Specifies the main server configuration file (customarily called postgresql.conf). This parameter can only be set on the postgres command line.
+
+hba_file (string)
+Specifies the configuration file for host-based authentication (customarily called pg_hba.conf). This parameter can only be set at server start.
+
+ident_file (string)
+Specifies the configuration file for user name mapping (customarily called pg_ident.conf). This parameter can only be set at server start. See also Section 20.2.
+
+external_pid_file (string)
+Specifies the name of an additional process-ID (PID) file that the server should create for use by server administration programs. This parameter can only be set at server start.
+
+In a default installation, none of the above parameters are set explicitly. Instead, the data directory is specified by the -D command-line option or the PGDATA environment variable, and the configuration files are all found within the data directory.
+
+https://www.postgresql.org/docs/13/runtime-config-connection.html
+
+listen_addresses (string)
+Specifies the TCP/IP address(es) on which the server is to listen for connections from client applications. The value takes the form of a comma-separated list of host names and/or numeric IP addresses. The special entry * corresponds to all available IP interfaces. 
+
+port (integer)
+The TCP port the server listens on; 5432 by default. Note that the same port number is used for all IP addresses the server listens on. This parameter can only be set at server start.
+
+max_connections (integer)
+Determines the maximum number of concurrent connections to the database server. The default is typically 100 connections, but might be less if your kernel settings will not support it (as determined during initdb). This parameter can only be set at server start.
+
+password_encryption (enum)
+When a password is specified in CREATE ROLE or ALTER ROLE, this parameter determines the algorithm to use to encrypt the password. The default value is md5, which stores the password as an MD5 hash (on is also accepted, as alias for md5). Setting this parameter to scram-sha-256 will encrypt the password with SCRAM-SHA-256.
+
+ssl (boolean)
+Enables SSL connections. This parameter can only be set in the postgresql.conf file or on the server command line. The default is off.
+
+ssl_ca_file (string)
+Specifies the name of the file containing the SSL server certificate authority (CA). Relative paths are relative to the data directory. This parameter can only be set in the postgresql.conf file or on the server command line. The default is empty, meaning no CA file is loaded, and client certificate verification is not performed.
+
+ssl_cert_file (string)
+Specifies the name of the file containing the SSL server certificate. Relative paths are relative to the data directory. This parameter can only be set in the postgresql.conf file or on the server command line. The default is server.crt.
+
+https://www.postgresql.org/docs/13/runtime-config-resource.html
+
+https://www.postgresql.org/docs/13/runtime-config-replication.html
+
+built-in streaming replication feature
+Masters can send data, while standbys are always receivers of replicated data.
+
+Master Server
+synchronous_standby_names (string)
+Specifies a list of standby servers that can support synchronous replication, as described in Section 26.2.8. There will be one or more active synchronous standbys; transactions waiting for commit will be allowed to proceed after these standby servers confirm receipt of their data. 
+The synchronous standbys will be those whose names appear in this list, and that are both currently connected and streaming data in real-time (as shown by a state of streaming in the pg_stat_replication view). Specifying more than one synchronous standby can allow for very high availability and protection against data loss.
+
+Standby Servers
+primary_conninfo (string)
+Specifies a connection string to be used for the standby server to connect with a sending server. This string is in the format described in Section 33.1.1. 
+If any option is unspecified in this string, then the corresponding environment variable (see Section 33.14) is checked. If the environment variable is not set either, then defaults are used.
+
+https://www.postgresql.org/docs/13/runtime-config-logging.html
+
+log_destination (string)
+PostgreSQL supports several methods for logging server messages, including stderr, csvlog and syslog. On Windows, eventlog is also supported. 
+Set this parameter to a list of desired log destinations separated by commas. The default is to log to stderr only. This parameter can only be set in the postgresql.conf file or on the server command line.
+
+logging_collector (boolean)
+This parameter enables the logging collector, which is a background process that captures log messages sent to stderr and redirects them into log files. 
+This approach is often more useful than logging to syslog, since some types of messages might not appear in syslog output. (One common example is dynamic-linker failure messages; another is error messages produced by scripts such as archive_command.) This parameter can only be set at server start.
+
+log_directory (string)
+When logging_collector is enabled, this parameter determines the directory in which log files will be created. It can be specified as an absolute path, or relative to the cluster data directory. 
+This parameter can only be set in the postgresql.conf file or on the server command line. The default is log.
+
+log_filename (string)
+When logging_collector is enabled, this parameter sets the file names of the created log files. 
+
+https://www.postgresql.org/docs/13/runtime-config-statistics.html
+
+These parameters control server-wide statistics collection features.
+When statistics collection is enabled, the data that is produced can be accessed via the pg_stat and pg_statio family of system views.
+
+https://www.postgresql.org/docs/13/runtime-config-client.html
+
+search_path (string)
+This variable specifies the order in which schemas are searched when an object (table, data type, function, etc.) is referenced by a simple name with no schema specified. 
+When there are objects of identical names in different schemas, the one found first in the search path is used. An object that is not in any of the schemas in the search path can only be referenced by specifying its containing schema with a qualified (dotted) name.
+
+default_tablespace (string)
+This variable specifies the default tablespace in which to create objects (tables and indexes) when a CREATE command does not explicitly specify a tablespace.
+
+default_transaction_isolation (enum)
+Each SQL transaction has an isolation level, which can be either “read uncommitted”, “read committed”, “repeatable read”, or “serializable”. 
+This parameter controls the default isolation level of each new transaction. The default is “read committed”.
+
+DateStyle (string)
+Sets the display format for date and time values, as well as the rules for interpreting ambiguous date input values.
+
+client_encoding (string)
+Sets the client-side encoding (character set). The default is to use the database encoding. The character sets supported by the PostgreSQL server are described in Section 23.3.1.
+
+## Authentication and Authorisation
+
+Authentication is the process by which the database server establishes the identity of the client, and by extension determines whether the client application (or the user who runs the client application) is permitted to connect with the database user name that was requested.
+
+PostgreSQL has two levels of authorisation, one at the database level, called host based authentication, and one at a finer level on tables, views and sequences.
+
+### Host-Based Authentication using pg_hba.conf
+
+https://www.postgresql.org/docs/13/auth-pg-hba-conf.html
+
+The host-based authentication is controlled by the pg_hba.conf file and defines which users can connect to which database and how they can connect to it. The file is a list of declarations, which are searched in order until one of the lines match. 
+The pg_hba.conf file is read on start-up and when the main server process receives a SIGHUP signal. If you edit the file on an active system, you will need to signal the postmaster (using pg_ctl reload, calling the SQL function pg_reload_conf(), or using kill -HUP) to make it re-read the file.
+
+They list the access method, the database they are trying to connect to, the user trying to connect and the authentication method being used.
+
+Access methods
+- local : This is for a user connecting via the unix socket on the local machine.
+- host : This matches connections over a TCP/IP network connection (IP-ADDRESS  IP-MASK)
+- hostnossl, hostssl : This is for users connecting over a non-encrypted or an encrypted TCP/IP connection using SSL. This is so that you can treat secure and non-secure connections differently. For example you might be happy to have clear text passwords over SSL, but only allow MD5 over non-secure connections.
+
+You can list several databases by separating them by commas. There are two special database names, all and sameuser. 
+- all : allows the person to connect to all databases on the server. 
+- sameuser : allows the user to connect to a database with the same name as the user connecting.
+
+You can also list several users by separating them by commas. You can specify groups by prefixing the name with a +.
+- usernameall : matches any user
+
+Authentication Methods
+- Trust authentication, which simply trusts that users are who they say they are.
+- Password authentication, which requires that users send a password.
+- GSSAPI authentication, which relies on a GSSAPI-compatible security library. Typically this is used to access an authentication server such as a Kerberos or Microsoft Active Directory server.
+- SSPI authentication, which uses a Windows-specific protocol similar to GSSAPI.
+- Ident authentication, which relies on an “Identification Protocol” (RFC 1413) service on the client's machine. (On local Unix-socket connections, this is treated as peer authentication.)
+- Peer authentication, which relies on operating system facilities to identify the process at the other end of a local connection. This is not supported for remote connections.
+- LDAP authentication, which relies on an LDAP authentication server.
+- RADIUS authentication, which relies on a RADIUS authentication server.
+- Certificate authentication, which requires an SSL connection and authenticates users by checking the SSL certificate they send.
+- PAM authentication, which relies on a PAM (Pluggable Authentication Modules) library.
+
+There are several password-based authentication methods. 
+These methods operate similarly but differ in how the users' passwords are stored on the server and how the password provided by a client is sent across the connection.
+
+- scram-sha-256 : The method scram-sha-256 performs SCRAM-SHA-256 authentication, as described in RFC 7677. 
+It is a challenge-response scheme that prevents password sniffing on untrusted connections and supports storing passwords on the server in a cryptographically hashed form that is thought to be secure.
+This is the most secure of the currently provided methods, but it is not supported by older client libraries.
+
+- md5 : The method md5 uses a custom less secure challenge-response mechanism. 
+It prevents password sniffing and avoids storing passwords on the server in plain text but provides no protection if an attacker manages to steal the password hash from the server. 
+Also, the MD5 hash algorithm is nowadays no longer considered secure against determined attacks.
+The md5 method cannot be used with the db_user_namespace feature.
+To ease transition from the md5 method to the newer SCRAM method, if md5 is specified as a method in pg_hba.conf but the user's password on the server is encrypted for SCRAM (see below), then SCRAM-based authentication will automatically be chosen instead.
+
+- password : The method password sends the password in clear-text and is therefore vulnerable to password “sniffing” attacks. 
+It should always be avoided if possible. If the connection is protected by SSL encryption then password can be used safely, though. (Though SSL certificate authentication might be a better choice if one is depending on using SSL).
+
+The password for each database user is stored in the pg_authid system catalog. 
+Passwords can be managed with the SQL commands CREATE ROLE and ALTER ROLE, e.g., CREATE ROLE foo WITH LOGIN PASSWORD 'secret', or the psql command \password. 
+If no password has been set up for a user, the stored password is null and password authentication will always fail for that user.
+
+The availability of the different password-based authentication methods depends on how a user's password on the server is encrypted (or hashed, more accurately). 
+This is controlled by the configuration parameter password_encryption at the time the password is set. 
+If a password was encrypted using the scram-sha-256 setting, then it can be used for the authentication methods scram-sha-256 and password (but password transmission will be in plain text in the latter case). 
+
+If a password was encrypted using the md5 setting, then it can be used only for the md5 and password authentication method specifications (again, with the password transmitted in plain text in the latter case).
+
+### User name maps
+
+When using an external authentication system such as Ident or GSSAPI, the name of the operating system user that initiated the connection might not be the same as the database user (role) that is to be used. 
+In this case, a user name map can be applied to map the operating system user name to a database user.
+To use user name mapping, specify map=map-name in the options field in pg_hba.conf. This option is supported for all authentication methods that receive external user names. 
+Since different mappings might be needed for different connections, the name of the map to be used is specified in the map-name parameter in pg_hba.conf to indicate which map to use for each individual connection.
+
+User name maps are defined in the ident map file, which by default is named pg_ident.conf and is stored in the cluster's data directory.
+The pg_ident.conf file is read on start-up and when the main server process receives a SIGHUP signal. If you edit the file on an active system, you will need to signal the postmaster (using pg_ctl reload, calling the SQL function pg_reload_conf(), or using kill -HUP) to make it re-read the file.
+
+### Roles (Users and groups)
+
+PostgreSQL manages database access permissions using the concept of roles. 
+A role can be thought of as either a database user, or a group of database users, depending on how the role is set up. 
+
+Roles can own database objects (for example, tables and functions) and can assign privileges on those objects to other roles to control who has access to which objects. 
+Furthermore, it is possible to grant membership in a role to another role, thus allowing the member role to use privileges assigned to another role.
+
+The concept of roles subsumes the concepts of “users” and “groups”. In PostgreSQL versions before 8.1, users and groups were distinct kinds of entities, but now there are only roles. 
+Any role can act as a user, a group, or both.
+
+In order to bootstrap the database system, a freshly initialized system always contains one predefined role. 
+This role is always a “superuser”. Customarily, this role will be named postgres. 
+In order to create more roles you first have to connect as this initial role.
+
+CREATE ROLE name;
+SELECT rolname FROM pg_roles;
+\du
+
+Every connection to the database server is made using the name of some particular role, and this role determines the initial access privileges for commands issued in that connection.
+
+A database role can have a number of attributes that define its privileges and interact with the client authentication system.
+
+- login privilege : Only roles that have the LOGIN attribute can be used as the initial role name for a database connection. 
+A role with the LOGIN attribute can be considered the same as a “database user”. 
+To create a role with login privilege, use either: CREATE ROLE name LOGIN; CREATE USER name;
+
+- superuser status : A database superuser bypasses all permission checks, except the right to log in. 
+This is a dangerous privilege and should not be used carelessly; it is best to do most of your work as a role that is not a superuser. 
+To create a new database superuser, use CREATE ROLE name SUPERUSER. You must do this as a role that is already a superuser.
+
+- database creation : A role must be explicitly given permission to create databases (except for superusers, since those bypass all permission checks).
+To create such a role, use CREATE ROLE name CREATEDB.
+
+- role creation : A role must be explicitly given permission to create more roles (except for superusers, since those bypass all permission checks). 
+To create such a role, use CREATE ROLE name CREATEROLE. A role with CREATEROLE privilege can alter and drop other roles, too, as well as grant or revoke membership in them. 
+However, to create, alter, drop, or change membership of a superuser role, superuser status is required; CREATEROLE is insufficient for that.
+
+- initiating replication : A role must explicitly be given permission to initiate streaming replication (except for superusers, since those bypass all permission checks). 
+A role used for streaming replication must have LOGIN permission as well. To create such a role, use CREATE ROLE name REPLICATION LOGIN.
+
+- password : A password is only significant if the client authentication method requires the user to supply a password when connecting to the database. 
+The password and md5 authentication methods make use of passwords. Database passwords are separate from operating system passwords. 
+Specify a password upon role creation with CREATE ROLE name PASSWORD 'string'.
+
+It is frequently convenient to group users together to ease management of privileges: that way, privileges can be granted to, or revoked from, a group as a whole. 
+In PostgreSQL this is done by creating a role that represents the group, and then granting membership in the group role to individual user roles.
+
+GRANT group_role TO role1, ... ;
+
+The members of a group role can use the privileges of the role in two ways. 
+First, every member of a group can explicitly do SET ROLE to temporarily “become” the group role. In this state, the database session has access to the privileges of the group role rather than the original login role, and any database objects created are considered owned by the group role not the login role. 
+Second, member roles that have the INHERIT attribute automatically have use of the privileges of roles of which they are members, including any privileges inherited by those roles.
+
+You can see the users on the server by selecting from the pg_shadow system table. 
+If you are not a super user, you will not have permission to access this table and will have to access the pg_user view instead, which is identical, but displays the password as stars.
+select * from pg_shadow;
+select * from pg_user;
+The psql program's \du meta-command is also useful for listing the existing users.
+
+We can see group membership by viewing the pg_group system table.
+select * from pg_group;
+
+The grolist column shows a list of user ids that are in the group. If you want to see the usernames in a particular group you can use:
+select usename from pg_user, (select grolist from pg_group where groname = 'sales') as groups where usesysid = ANY(grolist);
+
+### Permissions
+
+Every object (tables, views and sequences) have an owner, which is the person that created it. The owner, or a superuser, can set permissions on the object. 
+
+Permissions are made up of a user or group name and a set of rights.
+
+Privilege	short name	Description
+SELECT	r	Can read data from the object.
+INSERT	a	Can insert data into the object.
+UPDATE	w	Can change data in the object.
+DELETE	d	Can delete data from the object.
+RULE	R	Can create a rule on the table
+REFERENCES	x	Can create a foreign key to a table. Need this on both sides of the key.
+TRIGGER	t	Can create a trigger on the table.
+TEMPORARY	T	Can create a temporary table.
+EXECUTE	X	Can run the function.
+USAGE	U	Can use the procedural language.
+ALL		All appropriate privileges. For tables, this equates to arwdRxt
+
+You can apply these privileges to users, groups or a special target called PUBLIC, which is any user on the system.
+
+You can view permissions using the \z command in psql. You can use \d to view the owner.
+The * for postgres means that they have the privilege to grant that privilege.
+
+GRANT { { SELECT | INSERT | UPDATE | DELETE | RULE | REFERENCES | TRIGGER }
+    [,...] | ALL [ PRIVILEGES ] }
+    ON [ TABLE ] tablename [, ...]
+    TO { username | GROUP groupname | PUBLIC } [, ...] [ WITH GRANT OPTION ]
+
+REVOKE [ GRANT OPTION FOR ]
+    { { SELECT | INSERT | UPDATE | DELETE | RULE | REFERENCES | TRIGGER }
+    [,...] | ALL [ PRIVILEGES ] }
+    ON [ TABLE ] tablename [, ...]
+    FROM { username | GROUP groupname | PUBLIC } [, ...]
+    [ CASCADE | RESTRICT ]
+
+GRANT OPTION FOR allows you to remove the ability to grant privileges to others, and not the privileges themselves.
+Suppose you want to remove privileges from bob, and anyone he has granted it to, we can use the CASCADE option.
+
+Column Level Privileges
+PostgreSQL doesn’t directly support privileges at the column level but you can fake the, using views. To do this, you create a view with all the columns you want that person to see and grant them privileges to view that view.
+
+Changing Ownership
+It is possible to change the ownership of objects using the ALTER TABLE:
+ALTER TABLE suppliers OWNER TO bob;
+
+## Maintenance tasks
+
+### Backup
+
+### Vacuuming
+
+### Reindexing
+
+### Log file
+
+## High availability
+
+### Replication
+
+### Monitoring Activity
+
+### Monitoring Disk Usage
+
+### Reliability
+
