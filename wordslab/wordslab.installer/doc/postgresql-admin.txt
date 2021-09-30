@@ -481,21 +481,321 @@ ALTER TABLE suppliers OWNER TO bob;
 
 ## Maintenance tasks
 
-### Backup
+PostgreSQL, like any database software, requires that certain tasks be performed regularly to achieve optimum performance. 
+The tasks discussed here are required, but they are repetitive in nature and can easily be automated.
+
+One obvious maintenance task is the creation of backup copies of the data on a regular schedule. 
+Without a recent backup, you have no chance of recovery after a catastrophe (disk failure, fire, mistakenly dropping a critical table, etc.).
+
+The other main category of maintenance task is periodic “vacuuming” of the database.
+Closely related to this is updating the statistics that will be used by the query planner.
+Another task that might need periodic attention is log file management.
+
+### Backup and Restore
+
+There are three fundamentally different approaches to backing up PostgreSQL data:
+- SQL dump
+- File system level backup
+- Continuous archiving
+Each has its own strengths and weaknesses; each is discussed in turn in the following sections.
+
+#### SQL Dump
+
+The idea behind the dump method is to generate a file with SQL commands that, when fed back to the server, will recreate the database in the same state as it was at the time of the dump. PostgreSQL provides the utility program pg_dump for this purpose. The basic usage of this command is:
+Dumps created by pg_dump are internally consistent, meaning, the dump represents a snapshot of the database at the time pg_dump began running. 
+pg_dump does not block other operations on the database while it is working.
+An important advantage of pg_dump over the other backup methods described later is that pg_dump's output can generally be re-loaded into newer versions of PostgreSQL, whereas file-level backups and continuous archiving are both extremely server-version-specific.
+
+pg_dump dbname > dumpfile
+pg_dump is a regular PostgreSQL client application : it must have read access to all tables that you want to back up.
+So in order to back up the entire database you almost always have to run it as a database superuser.
+
+Text files created by pg_dump are intended to be read in by the psql program. 
+The general command form to restore a dump is :
+psql dbname < dumpfile
+
+The database dbname will not be created by this command, so you must create it yourself from template0 before executing psql (e.g., with createdb -T template0 dbname).
+Before restoring an SQL dump, all the users who own objects or were granted permissions on objects in the dumped database must already exist. 
+If they do not, the restore will fail to recreate the objects with the original ownership and/or permissions. 
+After restoring a backup, it is wise to run ANALYZE on each database so the query optimizer has useful statistics.
+
+The ability of pg_dump and psql to write to or read from pipes makes it possible to dump a database directly from one server to another, for example:
+pg_dump -h host1 dbname | psql -h host2 dbname
+
+pg_dump dumps only a single database at a time, and it does not dump information about roles or tablespaces.
+To support convenient dumping of the entire contents of a database cluster, the pg_dumpall program is provided. 
+pg_dumpall backs up each database in a given cluster, and also preserves cluster-wide data such as role and tablespace definitions. 
+The basic usage of this command is:
+pg_dumpall > dumpfile
+
+If you use tablespaces, make sure that the tablespace paths in the dump are appropriate for the new installation.
+pg_dumpall works by emitting commands to re-create roles, tablespaces, and empty databases, then invoking pg_dump for each database. 
+This means that while each database will be internally consistent, the snapshots of different databases are not synchronized.
+
+Use compressed dumps.  You can use your favorite compression program, for example gzip:
+pg_dump dbname | gzip > filename.gz
+gunzip -c filename.gz | psql dbname
+
+#### File system level backup
+
+An alternative backup strategy is to directly copy the files that PostgreSQL uses to store the data in the database;
+You can use whatever method you prefer for doing file system backups; for example:
+tar -cf backup.tar /usr/local/pgsql/data
+
+There are two restrictions, however, which make this method impractical, or at least inferior to the pg_dump method:
+- The database server must be shut down in order to get a usable backup. Half-way measures such as disallowing all connections will not work. Needless to say, you also need to shut down the server before restoring the data.
+- If you have dug into the details of the file system layout of the database, you might be tempted to try to back up or restore only certain individual tables or databases from their respective files or directories. This will not work
+
+An alternative file-system backup approach is to make a “consistent snapshot” of the data directory, if the file system supports that functionality.
+The typical procedure is to make a “frozen snapshot” of the volume containing the database, then copy the whole data directory (not just parts, see above) from the snapshot to a backup device, then release the frozen snapshot. 
+This will work even while the database server is running. 
+
+Note that a file system backup will typically be larger than an SQL dump. (pg_dump does not need to dump the contents of indexes for example, just the commands to recreate them.) 
+However, taking a file system backup might be faster.
+
+#### Continuous archiving and Point-in-Time Recovery (PITR)
+
+At all times, PostgreSQL maintains a write ahead log (WAL) in the pg_wal/ subdirectory of the cluster's data directory. 
+The log records every change made to the database's data files. This log exists primarily for crash-safety purposes: if the system crashes, the database can be restored to consistency by “replaying” the log entries made since the last checkpoint.
+The existence of the log makes it possible to use a third strategy for backing up databases: we can combine a file-system-level backup with backup of the WAL files. 
+If recovery is needed, we restore the file system backup and then replay from the backed-up WAL files to bring the system to a current state. 
+This approach is more complex to administer than either of the previous approaches, but it has some significant benefits:
+- We do not need a perfectly consistent file system backup as the starting point. Any internal inconsistency in the backup will be corrected by log replay.
+- Since we can combine an indefinitely long sequence of WAL files for replay, continuous backup can be achieved simply by continuing to archive the WAL files. This is particularly valuable for large databases.
+
+It is not necessary to replay the WAL entries all the way to the end. We could stop the replay at any point and have a consistent snapshot of the database as it was at that time. 
+Thus, this technique supports point-in-time recovery: it is possible to restore the database to its state at any time since your base backup was taken.
+
+If we continuously feed the series of WAL files to another machine that has been loaded with the same base backup file, we have a warm standby system.
+At any point we can bring up the second machine and it will have a nearly-current copy of the database.
+
+To enable WAL archiving, set the wal_level configuration parameter to replica or higher, archive_mode to on, and specify the shell command to use in the archive_command configuration parameter.
+The easiest way to perform a base backup is to use the pg_basebackup tool. It can create a base backup either as regular files or as a tar archive. 
 
 ### Vacuuming
 
+PostgreSQL databases require periodic maintenance known as vacuuming. 
+For many installations, it is sufficient to let vacuuming be performed by the autovacuum daemon.
+You might need to adjust the autovacuuming parameters described there to obtain best results for your situation.
+
+PostgreSQL's VACUUM command has to process each table on a regular basis for several reasons:
+- To recover or reuse disk space occupied by updated or deleted rows.
+- To update data statistics used by the PostgreSQL query planner.
+- To update the visibility map, which speeds up index-only scans.
+- To protect against loss of very old data due to transaction ID wraparound or multixact ID wraparound.
+- Each of these reasons dictates performing VACUUM operations of varying frequency and scope
+
+There are two variants of VACUUM: standard VACUUM and VACUUM FULL. 
+VACUUM FULL can reclaim more disk space but runs much more slowly. 
+Also, the standard form of VACUUM can run in parallel with production database operations.
+VACUUM FULL requires an ACCESS EXCLUSIVE lock on the table it is working on, and therefore cannot be done in parallel with other use of the table.
+VACUUM creates a substantial amount of I/O traffic, which can cause poor performance for other active sessions. 
+
+The usual goal of routine vacuuming is to do standard VACUUMs often enough to avoid needing VACUUM FULL. 
+The autovacuum daemon attempts to work this way, and in fact will never issue VACUUM FULL. 
+In this approach, the idea is not to keep tables at their minimum size, but to maintain steady-state usage of disk space: each table occupies space equivalent to its minimum size plus however much space gets used up between vacuum runs. 
+
+Using the autovacuum daemon alleviates this problem, since the daemon schedules vacuuming dynamically in response to update activity. 
+It is unwise to disable the daemon completely unless you have an extremely predictable workload. 
+
+The PostgreSQL query planner relies on statistical information about the contents of tables in order to generate good plans for queries. 
+These statistics are gathered by the ANALYZE command, which can be invoked by itself or as an optional step in VACUUM. It is important to have reasonably accurate statistics, otherwise poor choices of plans might degrade database performance.
+The autovacuum daemon, if enabled, will automatically issue ANALYZE commands whenever the content of a table has changed sufficiently. 
+
+PostgreSQL has an optional but highly recommended feature called autovacuum, whose purpose is to automate the execution of VACUUM and ANALYZE commands. 
+When enabled, autovacuum checks for tables that have had a large number of inserted, updated or deleted tuples. These checks use the statistics collection facility; therefore, autovacuum cannot be used unless track_counts is set to true. 
+In the default configuration, autovacuuming is enabled and the related configuration parameters are appropriately set.
+
+here is a persistent daemon process, called the autovacuum launcher, which is in charge of starting autovacuum worker processes for all databases. 
+The launcher will distribute the work across time, attempting to start one worker within each database every autovacuum_naptime seconds. 
+A maximum of autovacuum_max_workers worker processes are allowed to run at the same time.
+Each worker process will check each table within its database and execute VACUUM and/or ANALYZE as needed. 
+
 ### Reindexing
+
+In some situations it is worthwhile to rebuild indexes periodically with the REINDEX command or a series of individual rebuilding steps.
+
+If all but a few index keys on a page have been deleted, the page remains allocated. Therefore, a usage pattern in which most, but not all, keys in each range are eventually deleted will see poor use of space. 
+For such usage patterns, periodic reindexing is recommended.
+
+Also, for B-tree indexes, a freshly-constructed index is slightly faster to access than one that has been updated many times because logically adjacent pages are usually also physically adjacent in a newly built index. 
+It might be worthwhile to reindex periodically just to improve access speed.
+
+REINDEX can be used safely and easily in all cases. 
+This command requires an ACCESS EXCLUSIVE lock by default, hence it is often preferable to execute it with its CONCURRENTLY option, which requires only a SHARE UPDATE EXCLUSIVE lock.
 
 ### Log file
 
+The log output is invaluable when diagnosing problems. However, the log output tends to be voluminous (especially at higher debug levels) so you won't want to save it indefinitely. 
+You need to rotate the log files so that new log files are started and old ones removed after a reasonable period of time.
+There is a built-in log rotation facility, which you can use by setting the configuration parameter logging_collector to true in postgresql.conf. 
+You can also use this approach to capture the log data in machine readable CSV (comma-separated values) format.
+
 ## High availability
 
-### Replication
+Database servers can work together to allow a second server to take over quickly if the primary server fails (high availability), or to allow several computers to serve the same data (load balancing). 
+
+- Shared Disk Failover
+Shared disk failover avoids synchronization overhead by having only one copy of the database. It uses a single disk array that is shared by multiple servers. If the main database server fails, the standby server is able to mount and start the database as though it were recovering from a database crash. This allows rapid failover with no data loss.
+
+- File System (Block Device) Replication
+A modified version of shared hardware functionality is file system replication, where all changes to a file system are mirrored to a file system residing on another computer. The only restriction is that the mirroring must be done in a way that ensures the standby server has a consistent copy of the file system — specifically, writes to the standby must be done in the same order as those on the master.
+
+- Write-Ahead Log Shipping
+Warm and hot standby servers can be kept current by reading a stream of write-ahead log (WAL) records. If the main server fails, the standby contains almost all of the data of the main server, and can be quickly made the new master database server. This can be synchronous or asynchronous and can only be done for the entire database server.
+A standby server can be implemented using file-based log shipping or streaming replication, or a combination of both.
+
+- Logical Replication
+Logical replication allows a database server to send a stream of data modifications to another server. PostgreSQL logical replication constructs a stream of logical data modifications from the WAL. Logical replication allows the data changes from individual tables to be replicated. Logical replication doesn't require a particular server to be designated as a master or a replica but allows data to flow in multiple directions.
+
+- Trigger-Based Master-Standby Replication
+A master-standby replication setup sends all data modification queries to the master server. The master server asynchronously sends data changes to the standby server. The standby can answer read-only queries while the master server is running. The standby server is ideal for data warehouse queries.
+
+- SQL-Based Replication Middleware
+With SQL-based replication middleware, a program intercepts every SQL query and sends it to one or all servers. Each server operates independently. Read-write queries must be sent to all servers, so that every server receives any changes. But read-only queries can be sent to just one server, allowing the read workload to be distributed among them.
+
+Shared Disk	                NAS	
+File System Repl.           DRBD	
+Write-Ahead Log Shipping    built-in streaming repl.
+Logical Repl.	            built-in logical repl., pglogical
+Trigger-Based Repl.         Londiste, Slony
+SQL Repl. Middle-ware	    pgpool-II
+
+                                        WAL log shipping        Logical repl.
+No waiting for multiple servers         with sync off	        with sync off
+Master failure will never lose data     with sync on	        with sync on
+Replicas accept read-only queries       with hot standby	    yes
+Per-table granularity	 	 	 	    no                      yes
+
+- Data Partitioning
+Data partitioning splits tables into data sets. Each set can be modified by only one server. For example, data can be partitioned by offices, e.g., London and Paris, with a server in each office. If queries combining London and Paris data are necessary, an application can query both servers, or master/standby replication can be used to keep a read-only copy of the other office's data on each server.
+
+- Multiple-Server Parallel Query Execution
+Many of the above solutions allow multiple servers to handle multiple queries, but none allow a single query to use multiple servers to complete faster. This solution allows multiple servers to work concurrently on a single query. It is usually accomplished by splitting the data among servers and having each server execute its part of the query and return results to a central server where they are combined and returned to the user. This can be implemented using the PL/Proxy tool set.
+
+#### Log-shipping standby servers
+
+https://www.postgresql.org/docs/13/warm-standby.html
+
+Continuous archiving can be used to create a high availability (HA) cluster configuration with one or more standby servers ready to take over operations if the primary server fails. 
+This capability is widely referred to as warm standby or log shipping.
+
+The primary and standby server work together to provide this capability, though the servers are only loosely coupled. 
+The primary server operates in continuous archiving mode, while each standby server operates in continuous recovery mode, reading the WAL files from the primary.
+
+It should be noted that log shipping is asynchronous, i.e., the WAL records are shipped after transaction commit. 
+As a result, there is a window for data loss should the primary server suffer a catastrophic failure; transactions not yet shipped will be lost. 
+The size of the data loss window in file-based log shipping can be limited by use of the archive_timeout parameter, which can be set as low as a few seconds. However such a low setting will substantially increase the bandwidth required for file shipping. 
+Streaming replication (see Section 26.2.5) allows a much smaller window of data loss.
+
+It is usually wise to create the primary and standby servers so that they are as similar as possible, at least from the perspective of the database server.
+
+A server enters standby mode if a standby.signal file exists in the data directory when the server is started.
+In standby mode, the server continuously applies WAL received from the master server. 
+The standby server can read WAL from a WAL archive (see restore_command) or directly from the master over a TCP connection (streaming replication). 
+
+If you want to use streaming replication, set up authentication on the primary server to allow replication connections from the standby server(s); that is, create a role and provide a suitable entry or entries in pg_hba.conf with the database field set to replication.
+Take a base backup as described in Section 25.3.2 to bootstrap the standby server.
+
+Streaming replication allows a standby server to stay more up-to-date than is possible with file-based log shipping. 
+The standby connects to the primary, which streams WAL records to the standby as they're generated, without waiting for the WAL file to be filled.
+Streaming replication is asynchronous by default (see Section 26.2.8), in which case there is a small delay between committing a transaction in the primary and the changes becoming visible in the standby. 
+This delay is however much smaller than with file-based log shipping, typically under one second assuming the standby is powerful enough to keep up with the load.
+
+Synchronous replication offers the ability to confirm that all changes made by a transaction have been transferred to one or more synchronous standby servers. This extends that standard level of durability offered by a transaction commit. 
+When requesting synchronous replication, each commit of a write transaction will wait until confirmation is received that the commit has been written to the write-ahead log on disk of both the primary and standby server. 
+The only possibility that data can be lost is if both the primary and the standby suffer crashes at the same time.
+
+Once streaming replication has been configured, configuring synchronous replication requires only one additional configuration step: synchronous_standby_names must be set to a non-empty value. 
+synchronous_commit must also be set to on, but since this is the default value, typically no change is required.
+
+PostgreSQL does not provide the system software required to identify a failure on the primary and notify the standby database server. 
+Many such tools exist and are well integrated with the operating system facilities required for successful failover, such as IP address migration.
+Once failover to the standby occurs, there is only a single server in operation. This is known as a degenerate state. The former standby is now the primary, but the former primary is down and might stay down. 
+o return to normal operation, a standby server must be recreated, either on the former primary system when it comes up, or on a third, possibly new, system. 
+
+Hot Standby is the term used to describe the ability to connect to the server and run read-only queries while the server is in archive recovery or standby mode.
+The term Hot Standby also refers to the ability of the server to move from recovery through to normal operation while users continue running queries and/or keep their connections open.
+
+When the hot_standby parameter is set to true on a standby server, it will begin accepting connections once the recovery has brought the system to a consistent state. 
+All such connections are strictly read-only; not even temporary tables may be written.
+
+The data on the standby takes some time to arrive from the primary server so there will be a measurable delay between primary and standby. Running the same query nearly simultaneously on both primary and standby might therefore return differing results. 
+We say that data on the standby is eventually consistent with the primary. 
 
 ### Monitoring Activity
 
+PostgreSQL's statistics collector is a subsystem that supports collection and reporting of information about server activity. 
+Presently, the collector can count accesses to tables and indexes in both disk-block and individual-row terms. 
+It also tracks the total number of rows in each table, and information about vacuum and analyze actions for each table. 
+It can also count calls to user-defined functions and the total time spent in each one.
+
+PostgreSQL also supports reporting dynamic information about exactly what is going on in the system right now, such as the exact command currently being executed by other server processes, and which other connections exist in the system. 
+This facility is independent of the collector process.
+
+The parameter track_activities enables monitoring of the current command being executed by any server process.
+The parameter track_counts controls whether statistics are collected about table and index accesses.
+The parameter track_functions enables tracking of usage of user-defined functions.
+The parameter track_io_timing enables monitoring of block read and write times.
+
+The statistics collector transmits the collected information to other PostgreSQL processes through temporary files. These files are stored in the directory named by the stats_temp_directory parameter, pg_stat_tmp by default. 
+For better performance, stats_temp_directory can be pointed at a RAM-based file system, decreasing physical I/O requirements. 
+When the server shuts down cleanly, a permanent copy of the statistics data is stored in the pg_stat subdirectory, so that statistics can be retained across server restarts.
+
+When using the statistics to monitor collected data, it is important to realize that the information does not update instantaneously.
+Each individual server process transmits new statistical counts to the collector just before going idle; so a query or transaction still in progress does not affect the displayed totals.
+
+Dynamic Statistics Views
+pg_stat_activity	One row per server process, showing information related to the current activity of that process, such as state and current query. See pg_stat_activity for details.
+pg_stat_replication	One row per WAL sender process, showing statistics about replication to that sender's connected standby server. See pg_stat_replication for details.
+pg_stat_wal_receiver	Only one row, showing statistics about the WAL receiver from that receiver's connected server. See pg_stat_wal_receiver for details.
+pg_stat_subscription	At least one row per subscription, showing information about the subscription workers. See pg_stat_subscription for details.
+pg_stat_ssl	One row per connection (regular and replication), showing information about SSL used on this connection. See pg_stat_ssl for details.
+pg_stat_gssapi	One row per connection (regular and replication), showing information about GSSAPI authentication and encryption used on this connection. See pg_stat_gssapi for details.
+pg_stat_progress_analyze	One row for each backend (including autovacuum worker processes) running ANALYZE, showing current progress. See Section 27.4.1.
+pg_stat_progress_create_index	One row for each backend running CREATE INDEX or REINDEX, showing current progress. See Section 27.4.2.
+pg_stat_progress_vacuum	One row for each backend (including autovacuum worker processes) running VACUUM, showing current progress. See Section 27.4.3.
+pg_stat_progress_cluster	One row for each backend running CLUSTER or VACUUM FULL, showing current progress. See Section 27.4.4.
+pg_stat_progress_basebackup	One row for each WAL sender process streaming a base backup, showing current progress. See Section 27.4.5.
+
+Collected Statistics Views
+pg_stat_archiver	One row only, showing statistics about the WAL archiver process's activity. See pg_stat_archiver for details.
+pg_stat_bgwriter	One row only, showing statistics about the background writer process's activity. See pg_stat_bgwriter for details.
+pg_stat_database	One row per database, showing database-wide statistics. See pg_stat_database for details.
+pg_stat_database_conflicts	One row per database, showing database-wide statistics about query cancels due to conflict with recovery on standby servers. See pg_stat_database_conflicts for details.
+pg_stat_all_tables	One row for each table in the current database, showing statistics about accesses to that specific table. See pg_stat_all_tables for details.
+pg_stat_sys_tables	Same as pg_stat_all_tables, except that only system tables are shown.
+pg_stat_user_tables	Same as pg_stat_all_tables, except that only user tables are shown.
+pg_stat_xact_all_tables	Similar to pg_stat_all_tables, but counts actions taken so far within the current transaction (which are not yet included in pg_stat_all_tables and related views). The columns for numbers of live and dead rows and vacuum and analyze actions are not present in this view.
+pg_stat_xact_sys_tables	Same as pg_stat_xact_all_tables, except that only system tables are shown.
+pg_stat_xact_user_tables	Same as pg_stat_xact_all_tables, except that only user tables are shown.
+pg_stat_all_indexes	One row for each index in the current database, showing statistics about accesses to that specific index. See pg_stat_all_indexes for details.
+pg_stat_sys_indexes	Same as pg_stat_all_indexes, except that only indexes on system tables are shown.
+pg_stat_user_indexes	Same as pg_stat_all_indexes, except that only indexes on user tables are shown.
+pg_statio_all_tables	One row for each table in the current database, showing statistics about I/O on that specific table. See pg_statio_all_tables for details.
+pg_statio_sys_tables	Same as pg_statio_all_tables, except that only system tables are shown.
+pg_statio_user_tables	Same as pg_statio_all_tables, except that only user tables are shown.
+pg_statio_all_indexes	One row for each index in the current database, showing statistics about I/O on that specific index. See pg_statio_all_indexes for details.
+pg_statio_sys_indexes	Same as pg_statio_all_indexes, except that only indexes on system tables are shown.
+pg_statio_user_indexes	Same as pg_statio_all_indexes, except that only indexes on user tables are shown.
+pg_statio_all_sequences	One row for each sequence in the current database, showing statistics about I/O on that specific sequence. See pg_statio_all_sequences for details.
+pg_statio_sys_sequences	Same as pg_statio_all_sequences, except that only system sequences are shown. (Presently, no system sequences are defined, so this view is always empty.)
+pg_statio_user_sequences	Same as pg_statio_all_sequences, except that only user sequences are shown.
+pg_stat_user_functions	One row for each tracked function, showing statistics about executions of that function. See pg_stat_user_functions for details.
+pg_stat_xact_user_functions	Similar to pg_stat_user_functions, but counts only calls during the current transaction (which are not yet included in pg_stat_user_functions).
+pg_stat_slru	One row per SLRU, showing statistics of operations. See pg_stat_slru for details.
+
 ### Monitoring Disk Usage
 
-### Reliability
+It is easy to find your largest tables and indexes using this information:
+
+SELECT relname, relpages
+FROM pg_class
+ORDER BY relpages DESC;
+
+Each page is typically 8 kilobytes. (Remember, relpages is only updated by VACUUM, ANALYZE, and a few DDL commands such as CREATE INDEX.) 
+The file path name is of interest if you want to examine the table's disk file directly.
+
+he most important disk monitoring task of a database administrator is to make sure the disk doesn't become full. A filled data disk will not result in data corruption, but it might prevent useful activity from occurring. 
+If the disk holding the WAL files grows full, database server panic and consequent shutdown might occur.
 
