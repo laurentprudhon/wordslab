@@ -1,0 +1,4 @@
+﻿https://docs.bitnami.com/kubernetes/infrastructure/postgresql/
+
+https://github.com/bitnami/charts/tree/master/bitnami/postgresql
+https://github.com/bitnami/charts/tree/master/bitnami/postgresql-ha
