@@ -1,0 +1,85 @@
+﻿# Create Kubernetes cluster
+
+- Open solution "wordslab.sln"" in Visual Studio
+- Right click on project wordslab.installer : Publish
+  - Profil : FolderProfile
+  - Framework cible : net6.0
+  - Mode de déploiement : Autonome
+  - Runtime cible : linux-x64
+  - Emplacement cible : bin\Release\net6.0\publish\linux-x64\
+  - Produire un seul fichier : [x]
+  - Découper le code inutilisé : [x]
+- Publish
+
+- Launch Docker Desktop
+- Open Windows Terminal => Ubuntu
+
+cd OneDrive/Dev/C#/wordslab/wordslab/wordslab.installer/bin/Release/net6.0/publish/linux-x64/
+./wordslab
+
+# Clean up Kubernetes cluster
+
+k3d cluster delete wordslab-cluster
+
+sudo rm -rf /var/lib/wordslab-cluster/storage/agent0/*
+sudo rm -rf /var/lib/wordslab-cluster/storage/agent1/*
+sudo rm -rf /var/lib/wordslab-cluster/storage/agent2/*
+
+docker images
+docker image rm image_id
+
+# Local Docker Registry
+
+k3d registry create registry.localhost --port 5000
+
+// Check if it is running
+docker ps -f name=k3d-registry.local
+
+// Stop wsl
+
+Stop Docker Desktop
+Close all terminals
+Wait one minute
+
+// Add name to Windows Hosts file
+
+Type "cmd"" -> Right Click -> Execute as Administrator
+
+echo 127.0.0.1 k3d-registry.localhost >> %WINDIR%\System32\Drivers\Etc\Hosts
+
+// Restart wsl
+
+Launch Docker Desktop
+Open Windows Terminal > Ubuntu
+
+cat /etc/hosts -> 127.0.0.1       k3d-registry.localhost
+
+// Test the registry
+(docker pull mcr.microsoft.com/dotnet/aspnet:6.0)
+// tag an existing local image to be pushed to the registry
+docker tag mcr.microsoft.com/dotnet/aspnet:6.0 k3d-registry.localhost:5000/dotnet/aspnet:6.0
+// push that image to the registry
+docker push k3d-registry.localhost:5000/dotnet/aspnet:6.0
+
+// Explore the contents of the local repository
+
+curl -X GET k3d-registry.localhost:5000/v2/_catalog
+{"repositories":["dotnet/aspnet"]}
+
+curl -X GET k3d-registry.localhost:5000/v2/dotnet/aspnet/tags/list
+{"name":"dotnet/aspnet","tags":["6.0"]}
+
+curl -v --silent -H "Accept: application/vnd.docker.distribution.manifest.v2+json" -X GET k3d-registry.localhost:5000/v2/dotnet/aspnet/manifests/6.0 2>&1 | grep Docker-Content-Digest | awk '{print ($3)}'
+sha256:ca64f21db9511853694093634eb2b9e8563ec6dcc66e241aeb90e72553436fb4
+
+NOTE : DELETE is unsupported
+{"errors":[{"code":"UNSUPPORTED","message":"The operation is unsupported."}]}
+
+// create a new cluster that uses this registry
+// k3d sets everything up in the cluster for containerd to be able to pull images from that registry.
+k3d cluster create --registry-use k3d-registry.localhost:5000
+
+# 4. run a pod that uses this image
+kubectl run aspnet --image k3d-registry.localhost:5000/dotnet/aspnet:6.0
+
+

@@ -41,6 +41,56 @@ namespace wordslab.installer.Linux
             return null;
         }
 
+        // Executes : docker ps -f name=myregistry
+        // Returns  : true if local registry already exists
+        public static bool DoesLocalRegistryExist(string registryName)
+        {
+            try
+            {
+                string output;
+                string error;
+                int exitcode = Process.Run("docker", $"ps -f name={registryName}", 5, out output, out error);
+                if (exitcode == 0 && String.IsNullOrEmpty(error) && !String.IsNullOrEmpty(output))
+                {
+                    // CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+                    // ...
+                    var lines = output.Split('\n');
+                    foreach (var line in lines)
+                    {
+                        if (line.Contains(registryName))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            { }
+            return false;
+        }
+
+        // Executes : k3d registry create ...
+        // Returns  : 
+        // null is the cluster was sucessfully created
+        // command string if the create command failed
+        public static string CreateLocalRegistry(string registryName, int port = 5000)
+        {
+            var command = $"registry create {registryName} --port {port}";
+            try
+            {
+                string output;
+                string error;
+                int exitcode = Process.Run("k3d", command, 60, out output, out error);
+                if (exitcode == 0 && String.IsNullOrEmpty(error) && !String.IsNullOrEmpty(output))
+                {
+                    return null;
+                }
+            }
+            catch (Exception)
+            { }
+            return command;
+        }
+
         // Executes : k3d cluster list
         // Returns  : true if cluster already exists
         public static bool DoesK3dClusterExist(string clusterName)
@@ -74,7 +124,7 @@ namespace wordslab.installer.Linux
         // null is the cluster was sucessfully created
         // command string if the create command failed
         public static string CreateK3dCluster(string clusterName, int agents = 3, int hostWebPort = 8080,
-            bool createRegistry = false, bool exposeYugabyteDBPorts = false, bool exposePostgresqlPort = false, 
+            string registryName = null, bool exposeYugabyteDBPorts = false, bool exposePostgresqlPort = false, 
             bool mapHostPathDirectories = true, bool updateKubeconfig = true)
         {
             var command = $"cluster create {clusterName} --agents {agents} -p {hostWebPort}:80@loadbalancer";
@@ -86,9 +136,9 @@ namespace wordslab.installer.Linux
             {
                 command += " -p 5432:5432@loadbalancer";
             }
-            if (createRegistry)
+            if (registryName != null)
             {
-                command += " --registry-create";
+                command += $" --registry-use k3d-{registryName}:5000";
             }
             if (mapHostPathDirectories)
             {

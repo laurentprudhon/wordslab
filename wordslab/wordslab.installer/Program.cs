@@ -341,17 +341,36 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine("6. [underline]Create Kubernetes cluster[/] :");
             AnsiConsole.WriteLine();
 
+            var registryName = "registry.localhost";
+            if (!Linux.K3d.DoesLocalRegistryExist(registryName))
+            {
+                AnsiConsole.WriteLine($"Creating local Docker registry k3d-{registryName} ... (this may take several minutes)");
+                var commandIfError = Linux.K3d.CreateLocalRegistry(registryName: registryName);
+                if (commandIfError != null)
+                {
+                    AnsiConsole.MarkupLine("[red]Failed to create local Docker registry[/]");
+                    AnsiConsole.WriteLine("Please execute the command below to create it manually and fix errors :");
+                    AnsiConsole.MarkupLine($"[white]k3d {commandIfError}[/]");
+                    AnsiConsole.WriteLine();
+                    return 1;
+                }
+                else
+                {
+                    AnsiConsole.WriteLine();
+                }
+            }
+
             var clusterName = "wordslab-cluster";
             int agents = 3;
             if(!Linux.K3d.DoesK3dClusterExist(clusterName))
             {
-                AnsiConsole.WriteLine($"Creating cluster {clusterName} ... (this may take several minutes)");
-                var commandIfError = Linux.K3d.CreateK3dCluster(clusterName: clusterName, agents: agents, hostWebPort: 8080);
+                AnsiConsole.WriteLine($"Creating cluster k3d-{clusterName} ... (this may take several minutes)");
+                var commandIfError = Linux.K3d.CreateK3dCluster(clusterName: clusterName, agents: agents, hostWebPort: 8080, registryName: registryName);
                 if (commandIfError != null)
                 {
                     AnsiConsole.MarkupLine("[red]Failed to create k3d cluster[/]");
                     AnsiConsole.WriteLine("Please execute the command below to create it manually and fix errors :");
-                    AnsiConsole.MarkupLine($"[white]{commandIfError}[/]");
+                    AnsiConsole.MarkupLine($"[white]k3d {commandIfError}[/]");
                     AnsiConsole.WriteLine();
                     return 1;
                 }
@@ -395,7 +414,7 @@ namespace wordslab.installer
             }
             */
 
-            AnsiConsole.MarkupLine("7. [underline]Install Postgresql database[/] :");
+            /*AnsiConsole.MarkupLine("7. [underline]Install Postgresql database[/] :");
             AnsiConsole.WriteLine();
 
             var installName = "wordslab-db";
@@ -426,7 +445,7 @@ namespace wordslab.installer
             }
 
             AnsiConsole.MarkupLine($"Database {installName} [bold green]OK[/]");
-            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine();*/
 
             return 0;
         }
