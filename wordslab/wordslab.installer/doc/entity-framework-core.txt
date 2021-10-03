@@ -1,0 +1,686 @@
+﻿# Entity Framework Core
+
+## Installation
+
+### Packages and Tools
+
+To add EF Core to an application, install the NuGet package for the database provider you want to use.
+
+> dotnet add package Microsoft.EntityFrameworkCore
+> dotnet add package Microsoft.EntityFrameworkCore.Relational
+> dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+
+If you're building an ASP.NET Core application, you don't need to install the in-memory and SQL Server providers. Those providers are included in current versions of ASP.NET Core, alongside the EF Core runtime.
+The Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore NuGet package provides ASP.NET Core middleware for Entity Framework Core error pages. 
+This middleware helps to detect and diagnose errors with Entity Framework Core migrations.
+
+> dotnet add package Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore
+
+You can install tools to carry out EF Core-related tasks in your project, like creating and applying database migrations, or creating an EF Core model based on an existing database.
+The .NET Core command-line interface (CLI) tools can be used on Windows, Linux, or macOS. These commands begin with dotnet ef.
+
+> dotnet tool install --global dotnet-ef
+
+To update the tools, use the dotnet tool update command.
+
+> dotnet tool update
+
+Install the latest Microsoft.EntityFrameworkCore.Design package.
+
+> dotnet add package Microsoft.EntityFrameworkCore.Design
+
+Always use the version of the tools package that matches the major version of the runtime packages.
+
+### ASP.Net setup
+
+appsettings.{Environment}.json
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information"
+     ,"Microsoft.EntityFrameworkCore.Database.Command": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "SchoolContext": "Host=my_host;Database=my_db;Username=my_user;Password=my_pw"
+  }
+}
+
+To log SQL statements, add "Microsoft.EntityFrameworkCore.Database.Command": "Information" to the appsettings.Development.json file.
+With the preceding JSON, SQL statements are displayed on the command line and in the Visual Studio output window.
+
+Models/Student.cs
+Models/Enrollment.cs
+Models/Course.cs
+
+Data/SchoolContext.cs
+
+using Microsoft.EntityFrameworkCore;
+
+    public class SchoolContext : DbContext
+    {
+        public SchoolContext (DbContextOptions<SchoolContext> options)
+            : base(options)
+        {
+        }
+
+        public DbSet<Student> Students { get; set; }
+        public DbSet<Enrollment> Enrollments { get; set; }
+        public DbSet<Course> Courses { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Course>().ToTable("Course");
+            modelBuilder.Entity<Enrollment>().ToTable("Enrollment");
+            modelBuilder.Entity<Student>().ToTable("Student");
+        }
+    }
+
+Startup.cs
+
+public void ConfigureServices(IServiceCollection services)
+{
+    ...
+    services.AddDbContext<SchoolContext>(options =>
+            options.UseNpgsql(Configuration.GetConnectionString("SchoolContext")));
+
+    services.AddDatabaseDeveloperPageExceptionFilter();
+}
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment())
+    {
+        app.UseDeveloperExceptionPage();
+        app.UseMigrationsEndPoint();
+    }
+    else
+    {
+        app.UseExceptionHandler("/Error");
+        app.UseHsts();
+    }
+    ...
+ }
+
+- AddDatabaseDeveloperPageExceptionFilter provides helpful error information in the development environment for EF migrations errors.
+- UseMigrationsEndPoint(Microsoft.AspNetCore.Builder.MigrationsEndPointOptions options) processes requests to execute migrations operations : the middleware will listen for requests to the path configured in options.
+
+Program.cs
+
+public static void Main(string[] args)
+{
+    var host = CreateHostBuilder(args).Build();
+
+    CreateDbIfNotExists(host);
+
+    host.Run();
+}
+
+private static void CreateDbIfNotExists(IHost host)
+{
+    using (var scope = host.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        try
+        {
+            var context = services.GetRequiredService<SchoolContext>();
+            context.Database.EnsureCreated();
+            DbInitializer.Initialize(context);
+        }
+        catch (Exception ex)
+        {
+            var logger = services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "An error occurred creating the DB.");
+        }
+    }
+}
+
+The EnsureCreated method takes no action if a database for the context exists. 
+If no database exists, it creates the database and schema. 
+EnsureCreated enables the following workflow for handling data model changes:
+- Delete the database. Any existing data is lost.
+- Change the data model. For example, add an EmailAddress field.
+- Run the app.
+- EnsureCreated creates a database with the new schema.
+
+> dotnet ef database drop
+
+This workflow works early in development when the schema is rapidly evolving, as long as data doesn't need to be preserved. 
+The situation is different when data that has been entered into the database needs to be preserved. 
+When that is the case, use migrations.
+
+Later in the development, the database is deleted that was created by EnsureCreated and migrations is used.
+A database that is created by EnsureCreated can't be updated by using migrations.
+
+Data/DbInitializer.cs
+
+public static class DbInitializer
+    {
+        public static void Initialize(SchoolContext context)
+        {
+            // Look for any students.
+            if (context.Students.Any())
+            {
+                return;   // DB has been seeded
+            }
+
+            var students = new Student[]
+            {
+                new Student{FirstMidName="Carson",LastName="Alexander",EnrollmentDate=DateTime.Parse("2019-09-01")},
+                new Student{FirstMidName="Meredith",LastName="Alonso",EnrollmentDate=DateTime.Parse("2017-09-01")},
+                ...
+            };
+
+            context.Students.AddRange(students);
+            context.SaveChanges();
+            ...
+
+### Blazor Server specifics
+
+Blazor Server is a stateful app framework. The app maintains an ongoing connection to the server, and the user's state is held in the server's memory  in a circuit. 
+One example of user state is data held in dependency injection (DI) service instances that are scoped to the circuit. 
+The unique application model that Blazor Server provides requires a special approach to use Entity Framework Core.
+
+EF Core provides the AddDbContext extension for ASP.NET Core apps that registers the context as a scoped service by default. 
+In Blazor Server apps, scoped service registrations can be problematic because the instance is shared across components within the user's circuit.
+bContext isn't thread safe and isn't designed for concurrent use. 
+The existing lifetimes are inappropriate for these reasons:
+- Singleton shares state across all users of the app and leads to inappropriate concurrent use.
+- Scoped (the default) poses a similar issue between components for the same user.
+- Transient results in a new instance per request; but as components can be long-lived, this results in a longer-lived context than may be intended.
+
+1. By default, consider using one context per operation. 
+The context is designed for fast, low overhead instantiation:
+
+using var context = new MyContext();
+return await context.MyEntities.ToListAsync();
+
+The fastest way to create a new DbContext instance is by using new to create a new instance. 
+However, there are several scenarios that may require resolving additional dependencies.
+The recommended solution to create a new DbContext with dependencies is to use a factory.
+
+services.AddDbContextFactory<ContactContext>(opt =>
+    opt.UseSqlite($"Data Source={nameof(ContactContext.ContactsDb)}.db"));
+
+sing var context = DbFactory.CreateDbContext();
+
+2. Use a flag to prevent multiple concurrent operations:
+
+if (Loading)
+{
+    return;
+}
+try
+{
+    Loading = true;
+    ...
+}
+finally
+{
+    Loading = false;
+}
+
+3. For longer-lived operations that take advantage of EF Core's change tracking or concurrency control, scope the context to the lifetime of the component.
+
+You can use the factory to create a context and track it for the lifetime of the component. 
+First, implement IDisposable and inject the factory as shown in : Pages/EditContact.razor.
+
+@implements IDisposable
+@inject IDbContextFactory<ContactContext> DbFactory
+
+protected override async Task OnInitializedAsync()
+{
+    Busy = true;
+
+    try
+    {
+        Context = DbFactory.CreateDbContext();
+        Contact = await Context.Contacts
+            .SingleOrDefaultAsync(c => c.Id == ContactId);
+    }
+    finally
+    {
+        Busy = false;
+    }
+
+    await base.OnInitializedAsync();
+}
+
+public void Dispose()
+{
+    Context?.Dispose();
+}
+
+## Context
+
+The conventions EF uses:
+- The names of DbSet properties are used as table names. 
+- For entities not referenced by a DbSet property, entity class names are used as table names.
+- Entity property names are used for column names.
+- Entity properties that are named ID or classnameID are recognized as PK properties.
+- A property is interpreted as a FK property if it's named <navigation property name><PK property name>. For example, StudentID for the Student navigation property since the Student entity's PK is ID. 
+- FK properties can also be named <primary key property name>. For example, EnrollmentID since the Enrollment entity's PK is EnrollmentID.
+
+Conventional behavior can be overridden. 
+For example, table names can be explicitly specified. Column names and any property can be set as a PK or FK.
+
+## Model
+
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+The DataType attribute is used to specify a data type that's more specific than the database intrinsic type.
+The DisplayFormat attribute is used to explicitly specify the date format.
+The ApplyFormatInEditMode setting specifies that the formatting should also be applied when the value is displayed in a text box for editing. 
+For more information, see the <input> tag helper documentation.
+
+[DataType(DataType.Date)]
+[DisplayFormat(DataFormatString = "{0:yyyy-MM-dd}", ApplyFormatInEditMode = true)]
+public DateTime EnrollmentDate { get; set; }
+
+The StringLength attribute sets the maximum length in the database and provides client side and server side validation for ASP.NET Core MVC.
+You can also specify the minimum string length in this attribute, but the minimum value has no impact on the database schema.
+
+The StringLength attribute won't prevent a user from entering white space for a name. 
+You can use the RegularExpression attribute to apply restrictions to the input. 
+
+[StringLength(50)]
+[RegularExpression(@"^[A-Z]+[a-zA-Z]*$")]
+public string LastName { get; set; }
+
+The Column attribute specifies that when the database is created, the column of the Student table that maps to the FirstMidName property will be named FirstName. 
+
+[Column("FirstName")]
+public string FirstMidName { get; set; }
+
+The Required attribute makes the name properties required fields. 
+The Required attribute isn't needed for non-nullable types such as value types (DateTime, int, double, float, etc.). 
+Types that can't be null are automatically treated as required fields.
+
+The Required attribute must be used with MinimumLength for the MinimumLength to be enforced.
+
+[Display(Name = "Last Name")]
+[Required]
+[StringLength(50, MinimumLength=2)]
+public string LastName { get; set; }
+
+The Display attribute specifies that the caption for the text boxes should be "First Name", "Last Name", "Full Name", and "Enrollment Date" instead of the property name in each instance.
+
+[Display(Name = "Full Name")]
+public string FullName
+{
+    get
+    {
+        return LastName + ", " + FirstMidName;
+    }
+}
+
+FullName is a calculated property that returns a value that's created by concatenating two other properties. 
+Therefore it has only a get accessor, and no FullName column will be generated in the database.
+
+Navigation properties :
+
+public OfficeAssignment OfficeAssignment { get; set; }
+
+If a navigation property can hold multiple entities, its type must be a list in which entries can be added, deleted, and updated.
+You can specify ICollection<T> or a type such as List<T> or HashSet<T>. If you specify ICollection<T>, EF creates a HashSet<T> collection by default.
+
+public ICollection<CourseAssignment> CourseAssignments { get; set; }
+
+The Key attribute :
+
+There's a one-to-zero-or-one relationship between the Instructor and the OfficeAssignment entities. 
+An office assignment only exists in relation to the instructor it's assigned to, and therefore its primary key is also its foreign key to the Instructor entity. 
+But the Entity Framework can't automatically recognize InstructorID as the primary key of this entity because its name doesn't follow the ID or classnameID naming convention. 
+Therefore, the Key attribute is used to identify it as the key:
+
+public class OfficeAssignment
+    {
+        [Key]
+        public int InstructorID { get; set; }
+
+The course entity has a foreign key property DepartmentID which points to the related Department entity and it has a Department navigation property.
+
+The Entity Framework doesn't require you to add a foreign key property to your data model when you have a navigation property for a related entity. 
+EF automatically creates foreign keys in the database wherever they're needed and creates shadow properties for them. 
+But having the foreign key in the data model can make updates simpler and more efficient. 
+For example, when you fetch a Course entity to edit, the Department entity is null if you don't load it, so when you update the Course entity, you would have to first fetch the Department entity.
+When the foreign key property DepartmentID is included in the data model, you don't need to fetch the Department entity before you update.
+
+By default, Entity Framework assumes that primary key values are generated by the database. 
+That's what you want in most scenarios.
+The DatabaseGenerated attribute with the None parameter on the CourseID property specifies that primary key values are provided by the user rather than generated by the database.
+
+The DatabaseGenerated attribute can also be used to generate default values, as in the case of database columns used to record the date a row was created or updated. 
+For more information, see Generated Properties.
+
+ public class Course
+    {
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
+        [Display(Name = "Number")]
+        public int CourseID { get; set; }
+
+        [StringLength(50, MinimumLength = 3)]
+        public string Title { get; set; }
+
+        [Range(0, 5)]
+        public int Credits { get; set; }
+
+        public int DepartmentID { get; set; }
+
+        public Department Department { get; set; }
+
+Earlier you used the Column attribute to change column name mapping. 
+In the code for the Department entity, the Column attribute is being used to change SQL data type mapping so that the column will be defined using the SQL Server money type in the database.
+Column mapping is generally not required, because the Entity Framework chooses the appropriate SQL Server data type based on the CLR type that you define for the property. 
+The CLR decimal type maps to a SQL Server decimal type. 
+But in this case you know that the column will be holding currency amounts, and the money data type is more appropriate for that.
+
+public class Department
+    {
+        public int DepartmentID { get; set; }
+
+        [StringLength(50, MinimumLength = 3)]
+        public string Name { get; set; }
+
+        [DataType(DataType.Currency)]
+        [Column(TypeName = "money")]
+        public decimal Budget { get; set; }
+
+        [DataType(DataType.Date)]
+        [DisplayFormat(DataFormatString = "{0:yyyy-MM-dd}", ApplyFormatInEditMode = true)]
+        [Display(Name = "Start Date")]
+        public DateTime StartDate { get; set; }
+
+        public int? InstructorID { get; set; }
+
+        public Instructor Administrator { get; set; }
+
+By convention, the Entity Framework enables cascade delete for non-nullable foreign keys and for many-to-many relationships. 
+This can result in circular cascade delete rules, which will cause an exception when you try to add a migration. 
+For example, if you didn't define the Department.InstructorID property as nullable, EF would configure a cascade delete rule to delete the department when you delete the instructor, which isn't what you want to have happen. 
+
+If your business rules required the InstructorID property to be non-nullable, you would have to use the following fluent API statement to disable cascade delete on the relationship:
+
+modelBuilder.Entity<Department>()
+   .HasOne(d => d.Administrator)
+   .WithMany()
+   .OnDelete(DeleteBehavior.Restrict)
+
+DisplayFormat - NullDisplayText :
+
+public class Enrollment
+    {
+        [DisplayFormat(NullDisplayText = "No grade")]
+        public Grade? Grade { get; set; }
+
+The code in the OnModelCreating method of the DbContext class uses the fluent API to configure EF behavior. 
+The API is called "fluent" because it's often used by stringing a series of method calls together into a single statement :
+
+In this tutorial, you're using the fluent API only for database mapping that you can't do with attributes. 
+However, you can also use the fluent API to specify most of the formatting, validation, and mapping rules that you can do by using attributes.
+Some developers prefer to use the fluent API exclusively so that they can keep their entity classes "clean." 
+You can mix attributes and fluent API if you want, and there are a few customizations that can only be done by using fluent API, but in general the recommended practice is to choose one of these two approaches and use that consistently as much as possible. 
+If you do use both, note that wherever there's a conflict, Fluent API overrides attributes.
+
+Sometimes when you execute migrations with existing data, you need to insert stub data into the database to satisfy foreign key constraints. 
+The generated code in the Up method adds a non-nullable foreign key to the table. 
+If there are already rows in the table when the code runs, the AddColumn operation fails because the databse doesn't know what value to put in the column that can't be null. 
+To make this migration work with existing data you have to change the code to give the new column a default value, and create a stub target entity to act as the default. 
+
+//migrationBuilder.AddColumn<int>(
+//    name: "DepartmentID",
+//    table: "Course",
+//    nullable: false,
+//    defaultValue: 0);
+
+migrationBuilder.Sql("INSERT INTO dbo.Department (Name, Budget, StartDate) VALUES ('Temp', 0.00, GETDATE())");
+// Default value for FK points to department created above, with
+// defaultValue changed to 1 in following AddColumn statement.
+
+migrationBuilder.AddColumn<int>(
+    name: "DepartmentID",
+    table: "Course",
+    nullable: false,
+    defaultValue: 1);
+
+EF Core 5.0 introduces support for specifying text collations at the database, column or query level. 
+
+modelBuilder
+    .Entity<User>()
+    .Property(e => e.Name)
+    .UseCollation("SQL_Latin1_General_CP1_CS_AS");
+
+EF Core 5.0 adds additional mapping options, where an entity can be mapped to a SQL query (called a "defining query"), or to a table-valued function (TVF):
+Table-valued functions can also be mapped to a .NET method rather than to a DbSet, allowing parameters to be passed; the mapping can be set up with HasDbFunction.
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.Entity<Post>().ToSqlQuery(
+        @"SELECT Id, Name, Category, BlogId FROM posts
+          UNION ALL
+          SELECT Id, Name, ""Legacy"", BlogId from legacy_posts");
+
+    modelBuilder.Entity<Blog>().ToFunction("BlogsReturningFunction");
+}
+
+It is now possible to map an entity to a view when querying (or to a function or defining query), but to a table when updating:
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder
+        .Entity<Blog>()
+        .ToTable("Blogs")
+        .ToView("BlogsView");
+}
+
+
+### Concurrency conflicts
+
+You can resolve conflicts by handling DbConcurrencyException exceptions that the Entity Framework throws. 
+In order to know when to throw these exceptions, the Entity Framework must be able to detect conflicts. 
+Therefore, you must configure the database and the data model appropriately. 
+
+In the database table, include a tracking column that can be used to determine when a row has been changed. 
+You can then configure the Entity Framework to include that column in the Where clause of SQL Update or Delete commands.
+
+The data type of the tracking column is typically rowversion. 
+The rowversion value is a sequential number that's incremented each time the row is updated. 
+In an Update or Delete command, the Where clause includes the original value of the tracking column (the original row version). 
+If the row being updated has been changed by another user, the value in the rowversion column is different than the original value, so the Update or Delete statement can't find the row to update because of the Where clause. 
+When the Entity Framework finds that no rows have been updated by the Update or Delete command (that is, when the number of affected rows is zero), it interprets that as a concurrency conflict.
+
+The Timestamp attribute specifies that this column will be included in the Where clause of Update and Delete commands sent to the database. 
+
+public class Department
+    {
+        [Timestamp]
+        public byte[] RowVersion { get; set; }
+
+The attribute is called Timestamp because previous versions of SQL Server used a SQL timestamp data type before the SQL rowversion replaced it. 
+The .NET type for rowversion is a byte array.
+
+modelBuilder.Entity<Department>()
+    .Property(p => p.RowVersion).IsConcurrencyToken();
+
+### Configuration
+
+> optionsBuilder.LogTo(Console.WriteLine);
+
+### Logging
+
+Console app :
+
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    => optionsBuilder.LogTo(Console.WriteLine);
+
+ASP.NET app :
+
+appsettings.{Environment}.json
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information"
+     ,"Microsoft.EntityFrameworkCore.Database.Command": "Information"
+    }
+
+Call ToQueryString on any LINQ query to retrieve the SQL that the query would execute:
+
+Console.WriteLine(
+    ctx.Artists
+    .Where(a => a.Name == "Pink Floyd")
+    .ToQueryString());
+
+Various EF Core types have been fitted with an enhanced DebugView property which provides a detailed view into the internals.
+For example, ChangeTracker.DebugView can be consulted to see exactly which entities are being tracked in a given moment.
+
+EnableSensitiveDataLogging includes application data in exception messages and framework logging. 
+The logged data can include the values assigned to properties of entity instances and parameter values for commands sent to the database. 
+Logging data with EnableSensitiveDataLogging is a security risk, as it may expose passwords and other personally identifiable information (PII) when it logs SQL statements executed against the database.
+We recommend only enabling EnableSensitiveDataLogging for development and testing:
+
+#if DEBUG
+    services.AddDbContextFactory<ContactContext>(opt =>
+        opt.UseSqlite($"Data Source={nameof(ContactContext.ContactsDb)}.db")
+        .EnableSensitiveDataLogging());
+#else
+    services.AddDbContextFactory<ContactContext>(opt =>
+        opt.UseSqlite($"Data Source={nameof(ContactContext.ContactsDb)}.db"));
+#endif
+
+EF Core 5.0 exposes event counters which can be used to track your application's performance and spot various anomalies. Simply attach to a process running EF with the dotnet-counters tool:
+> dotnet counters monitor Microsoft.EntityFrameworkCore -p 49496
+
+## Migrations
+
+> dotnet ef migrations add InitialCreate
+> dotnet ef database update
+
+## Queries
+
+Code example in Console :
+
+using (var db = new BloggingContext())
+{
+    var blogs = db.Blogs
+        .Where(b => b.Rating > 3)
+        .OrderBy(b => b.Url)
+        .ToList();
+
+    var blog = new Blog { Url = "http://sample.com" };
+    db.Blogs.Add(blog);
+    db.SaveChanges();
+}
+
+Code example in ASP.NET :
+
+    public class StudentsController : Controller
+    {
+        private readonly SchoolContext _context;
+
+        public StudentsController(SchoolContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IActionResult> Index()
+        {
+            Students = await _context.Students.ToListAsync();
+
+Only statements that cause queries or commands to be sent to the database are executed asynchronously. 
+That includes ToListAsync, SingleOrDefaultAsync, FirstOrDefaultAsync, and SaveChangesAsync.
+
+An EF Core context isn't thread safe: don't try to do multiple operations in parallel.
+
+In general, a web page shouldn't be loading an arbitrary number of rows. A query should use paging or a limiting approach. 
+For example, the preceding query could use Take to limit the rows returned:
+
+Student = await _context.Students.Take(_mvcOptions.MaxModelBindingCollectionSize).ToListAsync();
+
+MaxModelBindingCollectionSize defaults to 1024. 
+The following code sets MaxModelBindingCollectionSize:
+
+public void ConfigureServices(IServiceCollection services)
+{
+    var myMaxModelBindingCollectionSize = Convert.ToInt32(
+                Configuration["MyMaxModelBindingCollectionSize"] ?? "100");
+
+    services.Configure<MvcOptions>(options =>
+           options.MaxModelBindingCollectionSize = myMaxModelBindingCollectionSize);
+    ...
+}
+
+When a database context retrieves table rows and creates entity objects that represent them, by default it keeps track of whether the entities in memory are in sync with what's in the database. 
+The data in memory acts as a cache and is used when you update an entity. 
+This caching is often unnecessary in a web application because context instances are typically short-lived (a new one is created and disposed for each request) and the context that reads an entity is typically disposed before that entity is used again.
+
+You can disable tracking of entity objects in memory by calling the AsNoTracking() method. 
+Typical scenarios in which you might want to do that include the following:
+During the context lifetime you don't need to update any entities, and you don't need EF to automatically load navigation properties with entities retrieved by separate queries. 
+Frequently these conditions are met in a controller's HttpGet action methods.
+
+There are several ways that Object-Relational Mapping (ORM) software such as Entity Framework can load related data into the navigation properties of an entity:
+
+*Eager loading* : When the entity is read, related data is retrieved along with it. 
+This typically results in a single join query that retrieves all of the data that's needed. 
+You specify eager loading in Entity Framework Core by using the Include and ThenInclude methods.
+
+The Include method now supports filtering of the entities included:
+
+var blogs = context.Blogs
+    .Include(e => e.Posts.Where(p => p.Title.Contains("Cheese")))
+    .ToList();
+
+ou can retrieve some of the data in separate queries, and EF "fixes up" the navigation properties. 
+That is, EF automatically adds the separately retrieved entities where they belong in navigation properties of previously retrieved entities. 
+For the query that retrieves related data, you can use the Load method instead of a method that returns a list or object, such as ToList or Single.
+
+*Explicit loading* : When the entity is first read, related data isn't retrieved. 
+You write code that retrieves the related data if it's needed. 
+As in the case of eager loading with separate queries, explicit loading results in multiple queries sent to the database. 
+The difference is that with explicit loading, the code specifies the navigation properties to be loaded. 
+You can use the Load method to do explicit loading.
+
+foreach(Department d in departments)
+{
+    _ context.Entry(d).Collection(p => p.Courses).Load();
+
+*Lazy loading* : When the entity is first read, related data isn't retrieved. 
+However, the first time you attempt to access a navigation property, the data required for that navigation property is automatically retrieved. 
+A query is sent to the database each time you try to get data from a navigation property for the first time. 
+
+If you know you need related data for every entity retrieved, eager loading often offers the best performance, because a single query sent to the database is typically more efficient than separate queries for each entity retrieved.
+The extra round trips to the database are especially detrimental to performance when latency is high.
+
+On the other hand, in some scenarios separate queries is more efficient. 
+Eager loading of all related data in one query might cause a very complex join to be generated, which SQL Server can't process efficiently. 
+Or if you need to access an entity's navigation properties only for a subset of a set of the entities you're processing, separate queries might perform better because eager loading of everything up front would retrieve more data than you need. 
+
+Perform raw SQL queries
+
+Use the DbSet.FromSql method for queries that return entity types. 
+The returned objects must be of the type expected by the DbSet object, and they're automatically tracked by the database context unless you turn tracking off.
+
+As is always true when you execute SQL commands in a web application, you must take precautions to protect your site against SQL injection attacks. One way to do that is to use parameterized queries to make sure that strings submitted by a web page can't be interpreted as SQL commands. 
+
+string query = "SELECT * FROM Department WHERE DepartmentID = {0}";
+var department = await _context.Departments.FromSql(query, id)
+
+Use the Database.ExecuteSqlCommand for non-query commands.
+
+## Postgresql provider
+
+https://www.npgsql.org/efcore/index.html
+
+## Html Helpers
+
+@Html.DisplayNameFor(model => model.Department)
+
+@Html.DisplayFor(modelItem => item.Department.Name)
