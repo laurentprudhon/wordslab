@@ -481,5 +481,30 @@ https://docs.microsoft.com/en-us/aspnet/core/mvc/views/working-with-forms?view=a
 public string Country { get; set; }
 public List<SelectListItem> Countries  { get; }
 
+Validation Message Tag Helper
 
+Adds the HTML5 data-valmsg-for="property" attribute to the span element, which attaches the validation error messages on the input field of the specified model property. 
+When a client side validation error occurs, jQuery displays the error message in the <span> element.
+Validation also takes place on the server. Clients may have JavaScript disabled and some validation can only be done on the server side.
 
+<span asp-validation-for="Email"></span>
+
+Validation Summary Tag Helper
+
+Targets <div> elements with the asp-validation-summary attribute.
+The Validation Summary Tag Helper is used to display a summary of validation messages. 
+The asp-validation-summary attribute value can be any of the following:
+ValidationSummary.All	    Property and model level
+ValidationSummary.ModelOnly	Model
+ValidationSummary.None	    None
+
+@model RegisterViewModel
+
+<form asp-controller="Demo" asp-action="RegisterValidation" method="post">
+    <div asp-validation-summary="ModelOnly"></div>
+    Email:  <input asp-for="Email" /> <br />
+    <span asp-validation-for="Email"></span><br />
+    Password: <input asp-for="Password" /><br />
+    <span asp-validation-for="Password"></span><br />
+    <button type="submit">Register</button>
+</form>
