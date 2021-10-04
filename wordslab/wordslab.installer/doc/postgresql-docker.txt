@@ -1,4 +1,26 @@
 ﻿https://docs.bitnami.com/kubernetes/infrastructure/postgresql/
 
+The service(s) created by the deployment can be exposed within or outside the cluster using any of the following approaches:
+- Ingress: This requires an Ingress controller to be installed in the Kubernetes cluster. 
+Set *.ingress.enabled=true to expose the corresponding service(s) through Ingress.
+
+- Cluster IP address: This exposes the service(s) on a cluster-internal IP address. This approach makes the corresponding service(s) reachable only from within the cluster. 
+Set *.service.type=ClusterIP to choose this approach.
+
+- Node port: This exposes the service() on each node’s IP address at a static port (the NodePort). This approach makes the corresponding service(s) reachable from outside the cluster, by requesting the static port using the node’s IP address, such as NODE-IP:NODE-PORT. 
+Set *.service.type=NodePort to choose this approach.
+
+- Load balancer IP address: This exposes the service(s) externally using a cloud provider’s load balancer. 
+Set *.service.type=LoadBalancer to choose this approach.
+
+It is strongly recommended to use immutable tags in a production environment. 
+This ensures your deployment does not change automatically if the same tag is updated with a different image.
+
+image.tag=11.13.0-debian-10-r40
+
 https://github.com/bitnami/charts/tree/master/bitnami/postgresql
 https://github.com/bitnami/charts/tree/master/bitnami/postgresql-ha
+
+How to Secure PostgreSQL: Security Hardening Best Practices & Tips
+
+https://www.enterprisedb.com/blog/how-to-secure-postgresql-security-hardening-best-practices-checklist-tips-encryption-authentication-vulnerabilities

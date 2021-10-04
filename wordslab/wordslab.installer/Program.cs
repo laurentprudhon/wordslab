@@ -393,6 +393,41 @@ namespace wordslab.installer
             AnsiConsole.MarkupLine($"Cluster {clusterName} [bold green]OK[/]");
             AnsiConsole.WriteLine();
 
+            AnsiConsole.MarkupLine("7. [underline]Install Postgresql database[/] :");
+            AnsiConsole.WriteLine();
+
+            var installName = "wordslab-db";
+            var installNamespace = "default";
+            var databaseName = "wordslab";
+            var sqlUser = "wordslab";
+            var sqlPassword = "wordsl@b2021";
+            int postgresqlPort = 5432;
+            if (!Linux.Postgresql.IsPostgresqlInstalled(installName, installNamespace))
+            {
+                AnsiConsole.WriteLine($"Installing database {installName} in namespace {installNamespace} ... (this may take several minutes)");
+                var diagnosticIfError = Linux.Postgresql.InstallPostgresql(helmInstallName: installName, installNamespace: installNamespace, 
+                    databaseName: databaseName, sqlUser: sqlUser, sqlPassword: sqlPassword, 
+                    storageClass: "local-path", port: postgresqlPort);
+                if (diagnosticIfError != null)
+                {
+                    AnsiConsole.MarkupLine("[red]Failed to install Postgresql database[/]");
+                    AnsiConsole.WriteLine("Installation error diagnostic :");
+                    AnsiConsole.WriteLine(diagnosticIfError);
+                    AnsiConsole.WriteLine();
+                    return 1;
+                }
+            }
+
+            AnsiConsole.MarkupLine($"Database {installName} [bold green]OK[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine($"PostgreSQL can be accessed via port {postgresqlPort} on the following DNS names from within your cluster:");
+            AnsiConsole.MarkupLine($"   [white]{installName}-postgresql.{installNamespace}.svc.cluster.local[/]");
+            AnsiConsole.WriteLine($"To get the password for user \"{sqlUser}\" run:");
+            AnsiConsole.MarkupLine($"   [white]export POSTGRES_PASSWORD=$(kubectl get secret --namespace {installNamespace} {installName}-postgresql -o jsonpath=\"{{.data.postgresql-password}}\" | base64 --decode)[/]");
+            AnsiConsole.WriteLine("To connect to your database from outside the cluster execute the following commands:");
+            AnsiConsole.MarkupLine($"   [white]kubectl port-forward --namespace {installNamespace} svc/{installName}-postgresql {postgresqlPort}:{postgresqlPort}[/]");
+            AnsiConsole.WriteLine();
+
             /*
             AnsiConsole.MarkupLine("7. [underline]Install Yugabyte database[/] :");
             AnsiConsole.WriteLine();
@@ -414,38 +449,6 @@ namespace wordslab.installer
             }
             */
 
-            /*AnsiConsole.MarkupLine("7. [underline]Install Postgresql database[/] :");
-            AnsiConsole.WriteLine();
-
-            var installName = "wordslab-db";
-            int postgresqlPort = 5432; 
-            var sqlUser = "wordslab";
-            var sqlPassword = "wordsl@b2021";
-            AnsiConsole.WriteLine($"Installing database {installName} ... (this may take several minutes)");
-            var diagnosticIfError = Linux.Postgresql.InstallPostgresql(databaseName : installName, installNamespace: installName, helmInstallName: installName,
-                sqlUser: sqlUser, sqlPassword: sqlPassword, storageClass: "local-path", port: postgresqlPort);
-            if (diagnosticIfError != null)
-            {
-                AnsiConsole.MarkupLine("[red]Failed to install Postgresql database[/]");
-                AnsiConsole.WriteLine("Installation error diagnostic :");
-                AnsiConsole.WriteLine(diagnosticIfError);
-                AnsiConsole.WriteLine();
-                return 1;
-            }
-            else
-            {
-                AnsiConsole.WriteLine();
-                AnsiConsole.WriteLine($"PostgreSQL can be accessed via port {postgresqlPort} on the following DNS names from within your cluster:");
-                AnsiConsole.MarkupLine($"   [white]{installName}-postgresql.{installName}.svc.cluster.local[/]");
-                AnsiConsole.WriteLine("To get the password for \"postgres\" run:");
-                AnsiConsole.MarkupLine($"   [white]export POSTGRES_PASSWORD=$(kubectl get secret --namespace {installName} {installName}-postgresql -o jsonpath=\"{{.data.postgresql-password}}\" | base64 --decode)[/]");
-                AnsiConsole.WriteLine("To connect to your database from outside the cluster execute the following commands:");
-                AnsiConsole.MarkupLine($"   [white]kubectl port-forward --namespace {installName} svc/{installName}-postgresql {postgresqlPort}:{postgresqlPort}[/]");
-                AnsiConsole.WriteLine();
-            }
-
-            AnsiConsole.MarkupLine($"Database {installName} [bold green]OK[/]");
-            AnsiConsole.WriteLine();*/
 
             return 0;
         }
