@@ -1,0 +1,9 @@
+﻿C:\Users\laure\OneDrive\Dev\C#\wordslab\wordslab\wordslab.web
+
+docker build -t k3d-registry.localhost:5000/wordslab/wordslab .
+
+docker push k3d-registry.localhost:5000/wordslab/wordslab
+
+kubectl run wordslab-web --image k3d-registry.localhost:5000/wordslab/wordslab
+
+
