@@ -32,7 +32,7 @@ namespace wordslab.documents.nlptextdoc
         public DateTime Timestamp { get; set; }
 
         /// <summary>
-        /// Any king of metadata can be attached to this document
+        /// Any kind of metadata can be attached to this document
         /// </summary>
         public IDictionary<string, string> Metadata
         {

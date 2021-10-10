@@ -1,0 +1,31 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordslab-web-depl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordslab-web
+  template:
+    metadata:
+      labels:
+        app: wordslab-web
+    spec:
+      containers:
+        - name: wordslab-web
+          image: k3d-registry.localhost:5000/wordslab/wordslab:latest
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordslab-web-srv
+spec:
+  type: ClusterIP
+  selector:
+    app: wordslab-web
+  ports:
+  - name: wordslab-web
+    protocol: TCP
+    port: 80
+    targetPort: 80
