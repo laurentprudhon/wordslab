@@ -1,0 +1,51 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using wordslab.web.Data
+@using wordslab.web.Models.Data
+
+@implements IDisposable
+@inject IDbContextFactory<WordslabContext> DbFactory
+
+
+<table class="table">
+<thead>
+    <th scope="col">Id</th>
+    <th scope="col">Name</th>
+</thead>
+<tbody>
+@foreach(var dataset in DataSets)
+{
+    <tr>
+        <th scope="row">@dataset.Id</th>
+        <td>@dataset.Name</td>
+    </tr>
+}
+</tbody>
+</table>
+
+@code {
+    private bool Busy = false;
+    private WordslabContext Context;
+
+    public IEnumerable<DataSet> DataSets { get; private set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Busy = true;
+        try
+        {
+            Context = DbFactory.CreateDbContext();
+            DataSets = Context.DataSets.Take(10);
+        }
+        finally
+        {
+            Busy = false;
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    public void Dispose()
+    {
+        Context?.Dispose();
+    }
+}

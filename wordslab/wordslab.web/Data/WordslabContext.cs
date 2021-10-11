@@ -22,6 +22,15 @@ namespace wordslab.web.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<AuditRecord>().ToTable("AuditLog");
+
+            // Register enum Types
+            modelBuilder.HasPostgresEnum<ChangeType>();
+        }
+
+        static WordslabContext()
+        {
+            // Register enum Types
+            Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ChangeType>();
         }
 
         // 
@@ -76,8 +85,8 @@ namespace wordslab.web.Data
                 UserLogin = httpContextAccessor?.HttpContext?.User?.Identity?.Name ?? "system",
                 Timestamp = DateTime.Now.ToUniversalTime(),
                 ChangeType = e.State switch { EntityState.Added => ChangeType.Created, EntityState.Modified => ChangeType.Updated, EntityState.Deleted => ChangeType.Deleted },
-                ValuesBefore = e.Properties.Where(p => e.State == EntityState.Deleted || e.State == EntityState.Modified).ToDictionary(p => p.Metadata.Name, p => p.OriginalValue?.ToString()).NullIfEmpty(),
-                ValuesAfter = e.Properties.Where(p => e.State == EntityState.Added || e.State == EntityState.Modified).ToDictionary(p => p.Metadata.Name, p => p.CurrentValue?.ToString()).NullIfEmpty()
+                ValuesBefore = e.Properties.Where(p => e.State == EntityState.Deleted || e.State == EntityState.Modified).Where(p => !p.Metadata.IsPrimaryKey()).ToDictionary(p => p.Metadata.Name, p => p.OriginalValue?.ToString()).NullIfEmpty(),
+                ValuesAfter = e.Properties.Where(p => e.State == EntityState.Added || e.State == EntityState.Modified).Where(p => !p.Metadata.IsPrimaryKey()).ToDictionary(p => p.Metadata.Name, p => p.CurrentValue?.ToString()).NullIfEmpty()
             };
         }
 

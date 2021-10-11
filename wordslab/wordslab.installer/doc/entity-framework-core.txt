@@ -187,7 +187,7 @@ The unique application model that Blazor Server provides requires a special appr
 
 EF Core provides the AddDbContext extension for ASP.NET Core apps that registers the context as a scoped service by default. 
 In Blazor Server apps, scoped service registrations can be problematic because the instance is shared across components within the user's circuit.
-bContext isn't thread safe and isn't designed for concurrent use. 
+DbContext isn't thread safe and isn't designed for concurrent use. 
 The existing lifetimes are inappropriate for these reasons:
 - Singleton shares state across all users of the app and leads to inappropriate concurrent use.
 - Scoped (the default) poses a similar issue between components for the same user.

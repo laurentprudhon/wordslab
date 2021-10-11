@@ -19,7 +19,7 @@ namespace wordslab.web.Data
             };
             context.DataSets.AddRange(datasets);
 
-            context.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
     }
 }

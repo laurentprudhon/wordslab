@@ -11,7 +11,7 @@ builder.Services.AddServerSideBlazor();
 
 // --- Use Entity Framework Core with Postgresql database
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-builder.Services.AddDbContext<WordslabContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("SchoolContext")));
+builder.Services.AddDbContextFactory<WordslabContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("SchoolContext")));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 // ---
 
@@ -49,7 +49,8 @@ static async Task CreateDbIfNotExists(WebApplication app)
         var services = scope.ServiceProvider;
         try
         {
-            var context = services.GetRequiredService<WordslabContext>();
+            var dbFactory = services.GetRequiredService<IDbContextFactory<WordslabContext>>();
+            using var context = dbFactory.CreateDbContext();
             var neededToCreateDatabase = context.Database.EnsureCreated();
             await WordslabDbInitializer.InitializeAsync(context);
         }
