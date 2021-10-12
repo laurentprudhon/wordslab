@@ -15,6 +15,9 @@ spec:
       containers:
         - name: wordslab-web
           image: k3d-registry.localhost:5000/wordslab/wordslab:latest
+          env:
+          - name: ASPNETCORE_ENVIRONMENT
+            value: "KubernetesDevelopment"
 ---
 apiVersion: v1
 kind: Service

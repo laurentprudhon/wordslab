@@ -18,13 +18,13 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+if (!IsDevelopment(app.Environment))
 {
     app.UseExceptionHandler("/Error");
 }
 
 // --- Use Entity Framework Core with Postgresql database
-if (app.Environment.IsDevelopment())
+if (IsDevelopment(app.Environment))
 {
     app.UseDeveloperExceptionPage();
     await CreateDbIfNotExists(app);
@@ -62,3 +62,9 @@ static async Task CreateDbIfNotExists(WebApplication app)
     }
 }
 // ---
+
+// Support for Kubernetes deployment
+static bool IsDevelopment(IHostEnvironment hostEnvironment)
+{
+    return  hostEnvironment.IsDevelopment() || hostEnvironment.IsEnvironment("KubernetesDevelopment");
+}
