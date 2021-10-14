@@ -11,10 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="log4net" Version="2.0.12" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Abot\Abot.csproj" />
     <ProjectReference Include="..\AngleSharp.Css\AngleSharp.Css.csproj" />
     <ProjectReference Include="..\AngleSharp\AngleSharp.csproj" />

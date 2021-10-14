@@ -5,7 +5,7 @@ namespace wordslab.documents
 {
     class Program
     {
-        static string version = "1.0";
+        static string version = "2.0";
 
         static void PrintUsage()
         {
@@ -45,7 +45,7 @@ namespace wordslab.documents
             Console.WriteLine();
             Console.WriteLine("The extraction can take a while :");
             Console.WriteLine("- your system can go to hibernation mode and resume without interrupting the crawl");
-            Console.WriteLine("- your can even stop the crawl (Ctrl-C or shutdown) and continue it later where you left it");
+            Console.WriteLine("- you can even stop the crawl (Ctrl-C or shutdown) and continue it later where you left it");
             Console.WriteLine("- the continue command will use checkpoint and config files found in the \"_nlptextdoc\" subfolder");
             Console.WriteLine("- the restart command will ignore any checkpoint, start again at the root url, and overwrite everything");
             Console.WriteLine();

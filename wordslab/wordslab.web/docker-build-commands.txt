@@ -12,4 +12,6 @@ cd /mnt/c/Users/laure/OneDrive/Dev/C#/wordslab/wordslab/wordslab.web
 
 kubectl apply -f ./Kubernetes/wordslab-web-depl.yaml
 
+DEV SETUP
 
+kubectl port-forward --namespace default svc/wordslab-db-postgresql 5432:5432 &

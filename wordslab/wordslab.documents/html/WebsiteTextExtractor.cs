@@ -118,7 +118,6 @@ namespace wordslab.documents.html
 
             config.IsRespectRobotsDotTextEnabled = true;
             //config.UrlPatternsToExclude = ExtractorParams.UrlPatternsToExclude;
-            throw new NotImplementedException();
             config.IsRespectMetaRobotsNoFollowEnabled = true;
             config.IsRespectHttpXRobotsTagHeaderNoFollowEnabled = true;
             config.IsRespectAnchorRelNoFollowEnabled = true;
@@ -205,8 +204,8 @@ namespace wordslab.documents.html
             try
             {
                 // Add the page already downloaded by Abot in the document cache
-                var htmlDocumentUri = crawledPage.HttpWebResponse.ResponseUri;
-                if (!context.ResponseCache.ContainsKey(htmlDocumentUri.AbsoluteUri))
+                var htmlDocumentUri = crawledPage.Uri;
+                /*if (!context.ResponseCache.ContainsKey(htmlDocumentUri.AbsoluteUri))
                 {
                     var response = VirtualResponse.Create(r =>
                     {
@@ -219,17 +218,17 @@ namespace wordslab.documents.html
                         }
                     });
                     context.ResponseCache.Add(htmlDocumentUri.AbsoluteUri, response);
-                }
-
+                }*/
+                
                 // Parse the page and its Css dependencies whith Anglesharp
                 // in the right context, initialized in the constructor
                 Stopwatch timer = Stopwatch.StartNew();
-                crawledPage.AngleSharpHtmlDocument = context.OpenAsync(htmlDocumentUri.AbsoluteUri).Result as IHtmlDocument;
+                var htmlDocument = crawledPage.AngleSharpHtmlDocument /*= context.OpenAsync(htmlDocumentUri.AbsoluteUri).Result as IHtmlDocument*/;
                 timer.Stop();
                 Perfs.AddParseTime(timer.ElapsedMilliseconds);
 
                 // Remove page which was just parsed from document cache (not useful anymore)
-                context.ResponseCache.Remove(htmlDocumentUri.AbsoluteUri);
+                /*context.ResponseCache.Remove(htmlDocumentUri.AbsoluteUri);*/
 
                 // Don't impact the crawl decision
                 return new CrawlDecision() { Allow = true };
@@ -244,7 +243,7 @@ namespace wordslab.documents.html
                 }
                 else
                 {
-                    WriteError("Error while parsing the page " + crawledPage.HttpWebResponse.ResponseUri.AbsoluteUri, e);
+                    WriteError("Error while parsing the page " + crawledPage.Uri.AbsoluteUri, e);
                 }
 
                 // Don't crawl
@@ -270,6 +269,10 @@ namespace wordslab.documents.html
         // Utility method to ensure that we load only Css dependencies
         private bool FilterHtmlAndCssResources(Request request)
         {
+            // TEMP : load eveything
+            return true;
+
+            /*
             // Load Html documents
             if (originator == null) { return true; }
             // Load Css stylesheets (and their contents) only
@@ -283,6 +286,7 @@ namespace wordslab.documents.html
             }
             // Don't load any other type of resource
             return false;
+            */
         }
 
         private void ConfigureStorageDirectories()
@@ -367,7 +371,7 @@ namespace wordslab.documents.html
             messagesWriter = new StreamWriter(Path.Combine(logsDirectory.FullName, MessagesLogFileName), DoContinue);
 
             exceptionsWriter = new StreamWriter(Path.Combine(logsDirectory.FullName, ExceptionsLogFileName), DoContinue);
-            log4net.LogManager.SetTextWriter(exceptionsWriter);
+            //log4net.LogManager.SetTextWriter(exceptionsWriter);
         }
 
         private void LogRequest(CrawledPage crawledPage, float percentUnique)
@@ -378,9 +382,9 @@ namespace wordslab.documents.html
                 requestsWriter.Write(";");
                 requestsWriter.Write(ToCsvSafeString(crawledPage.Uri.AbsoluteUri));
                 requestsWriter.Write(";");
-                if (crawledPage.HttpWebResponse != null)
+                if (crawledPage.HttpResponseMessage != null)
                 {
-                    requestsWriter.Write(crawledPage.HttpWebResponse.StatusCode);
+                    requestsWriter.Write(crawledPage.HttpResponseMessage.StatusCode);
                 }
                 requestsWriter.Write(";");
                 requestsWriter.Write((int)crawledPage.Elapsed);
@@ -417,10 +421,10 @@ namespace wordslab.documents.html
                     requestsWriter.Write(";");
                     requestsWriter.Write(";");
                 }
-                if (crawledPage.WebException != null)
+                if (crawledPage.HttpRequestException != null)
                 {
                     requestsWriter.Write(";");
-                    requestsWriter.Write(ToCsvSafeString(crawledPage.WebException.Message));
+                    requestsWriter.Write(ToCsvSafeString(crawledPage.HttpRequestException.Message));
                 }
                 else
                 {
@@ -507,17 +511,17 @@ namespace wordslab.documents.html
                 CrawledPage crawledPage = e.CrawledPage;
 
                 // Exit if the page wasn't crawled successfully
-                if (crawledPage.WebException != null || crawledPage.HttpWebResponse.StatusCode != HttpStatusCode.OK)
+                if (crawledPage.HttpRequestException != null || crawledPage.HttpResponseMessage.StatusCode != HttpStatusCode.OK)
                 {
                     LogRequest(crawledPage, 0);
                     
-                    if (crawledPage.WebException != null)
+                    if (crawledPage.HttpRequestException != null)
                     {
                         Perfs.AddCrawlError();
                     }
-                    else if(crawledPage.HttpWebResponse != null)
+                    else if(crawledPage.HttpResponseMessage != null)
                     {
-                        int statusCode = (int)crawledPage.HttpWebResponse.StatusCode;
+                        int statusCode = (int)crawledPage.HttpResponseMessage.StatusCode;
                         if(statusCode != 404 && statusCode >= 400)
                         {
                             Perfs.AddCrawlError();
@@ -534,7 +538,7 @@ namespace wordslab.documents.html
                 }
 
                 // Get the page and its Css dependencies parsed by Abot whith Anglesharp
-                var htmlDocumentUri = crawledPage.HttpWebResponse.ResponseUri;
+                var htmlDocumentUri = crawledPage.Uri;
                 var htmlDocument = crawledPage.AngleSharpHtmlDocument;
 
                 // Visit the Html page syntax tree and convert it to NLPTextDocument
@@ -603,7 +607,7 @@ namespace wordslab.documents.html
 
                 // Write one checkpoint every one minute 
                 // to enable the "continue" crawl feature
-                lock (CheckpointFileName)
+                /*lock (CheckpointFileName)
                 {
                     if (stopCrawl || DateTime.Now.Subtract(lastCheckpointTime).Minutes >= 1)
                     {
@@ -619,14 +623,14 @@ namespace wordslab.documents.html
                         DisplayMessages(WriteEndMessage, stopMessage);
                         Environment.Exit(0);
                     }
-                }                
+                }*/       
             }
             catch (Exception ex)
             {
                 // Safeguard to make sure that an error 
                 // during the processing of a single page 
                 // can't stop the whole crawl process                
-                WriteError("Error while processing the page : " + e.CrawledPage.HttpWebResponse.ResponseUri.AbsoluteUri,  ex);
+                WriteError("Error while processing the page : " + e.CrawledPage.Uri.AbsoluteUri,  ex);
             }
         }        
 
@@ -692,7 +696,7 @@ namespace wordslab.documents.html
                 {
                     cssSource = ((CssParseEvent)ev).StyleSheet.OwnerNode.LocalName;
                 }
-                Console.WriteLine("AngleSharp-Parsed: " + ((CssParseEvent)ev).StyleSheet.Children.Count() + " CSS rules (" + cssSource + ")");
+                Console.WriteLine("AngleSharp-Parsed: " + ((CssParseEvent)ev).StyleSheet.Rules.Length + " CSS rules (" + cssSource + ")");
             }
         }
 

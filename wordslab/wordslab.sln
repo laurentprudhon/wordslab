@@ -17,7 +17,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NRobotsCore", "NRobotsCore\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Abot", "Abot\Abot.csproj", "{D34FA3C4-F258-4438-896B-862FB7C88353}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wordslab.web", "wordslab.web\wordslab.web.csproj", "{056A2AAF-0778-4AD7-9C28-383E34B0C350}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "wordslab.web", "wordslab.web\wordslab.web.csproj", "{056A2AAF-0778-4AD7-9C28-383E34B0C350}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wordslab.documents.test", "wordslab.documents.test\wordslab.documents.test.csproj", "{5A4D30F9-C872-40D9-803C-71F6D612E00E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -53,6 +55,10 @@ Global
 		{056A2AAF-0778-4AD7-9C28-383E34B0C350}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{056A2AAF-0778-4AD7-9C28-383E34B0C350}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{056A2AAF-0778-4AD7-9C28-383E34B0C350}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A4D30F9-C872-40D9-803C-71F6D612E00E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A4D30F9-C872-40D9-803C-71F6D612E00E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A4D30F9-C872-40D9-803C-71F6D612E00E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A4D30F9-C872-40D9-803C-71F6D612E00E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
